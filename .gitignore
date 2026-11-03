@@ -1,0 +1,8 @@
+# 本地构建产物
+dist/
+*.exe
+
+# 环境与编辑器
+.env
+.idea/
+.vscode/
