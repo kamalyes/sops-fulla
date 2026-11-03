@@ -1,0 +1,176 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="config-token" content="__SESSION_TOKEN__">
+  <title>SopsCos Dashboard · 配置管理</title>
+  <link rel="stylesheet" href="/style.css">
+  <script src="/app.js" defer></script>
+</head>
+<body>
+  <div id="busy-bar" hidden></div>
+
+  <aside class="sidebar">
+    <a class="brand" href="/" aria-label="配置管理首页">
+      <span class="brand-mark" aria-hidden="true">≋</span>
+      <span>SopsCos<small>配置工作台</small></span>
+    </a>
+
+    <div class="workspace-label">
+      <span class="online-dot" aria-hidden="true"></span>
+      <span id="repository-name">本地工作区</span>
+      <span class="workspace-badge">LOCAL</span>
+    </div>
+
+    <label class="search-wrap">
+      <span aria-hidden="true">⌕</span>
+      <input id="service-search" type="search" placeholder="查找服务…" aria-label="查找服务">
+      <button id="clear-search" class="text-button" hidden aria-label="清空搜索">✕</button>
+    </label>
+
+    <div class="section-label">服务目录 <span id="service-count">—</span></div>
+    <nav id="services" aria-label="服务列表"></nav>
+
+    <div class="sidebar-bottom">
+      <button id="open-key-modal" class="key-status-button" aria-haspopup="dialog">
+        <span id="key-status-dot" class="status-dot" aria-hidden="true"></span>
+        <span id="key-status-text">私钥状态检查中…</span>
+        <span aria-hidden="true">›</span>
+      </button>
+      <span class="sidebar-note">更改保存在当前仓库 · 部署后生效</span>
+    </div>
+  </aside>
+
+  <main>
+    <header class="topbar">
+      <div class="breadcrumb">
+        <span>工作区</span><span class="crumb-divider" aria-hidden="true">/</span>
+        <span>服务配置</span><span class="crumb-divider" aria-hidden="true">/</span>
+        <code id="topbar-path" class="path-chip">—</code>
+      </div>
+      <span class="local-pill"><span class="online-dot" aria-hidden="true"></span>本机连接</span>
+    </header>
+
+    <div class="content">
+      <section class="page-heading">
+        <div>
+          <div class="eyebrow">SERVICE CONFIGURATION</div>
+          <h1 id="service-title">服务配置</h1>
+          <p>选择环境，修改配置其余交给工作台</p>
+        </div>
+        <div class="actions">
+          <span id="dirty-indicator" class="dirty-pill" hidden>● 未保存</span>
+          <button id="reload" class="button secondary" disabled>重新加载</button>
+          <button id="save" class="button primary" disabled>保存更改 <kbd>⌘S</kbd></button>
+        </div>
+      </section>
+
+      <section class="environment-panel">
+        <div>
+          <span class="small-label">当前环境</span>
+          <div id="environments" class="environment-tabs" role="group" aria-label="选择环境"></div>
+        </div>
+        <span class="environment-hint">不同环境独立保存配置</span>
+      </section>
+
+      <div id="files" class="file-tabs" role="group" aria-label="配置文件"></div>
+
+      <section class="editor-card" id="editor-card" aria-label="配置编辑器">
+        <div class="editor-header">
+          <div>
+            <h2 id="editor-title">准备就绪</h2>
+            <p id="editor-description">从左侧选择服务，查看和编辑配置</p>
+          </div>
+          <span id="item-count" class="count-pill" hidden></span>
+        </div>
+
+        <div id="empty" class="empty-state">
+          <span class="empty-symbol" aria-hidden="true">≋</span>
+          <h3>正在加载服务目录</h3>
+          <p>请稍候</p>
+        </div>
+
+        <div id="secret-editor" hidden>
+          <div class="editor-toolbar">
+            <label class="key-search">
+              <span aria-hidden="true">⌕</span>
+              <input id="key-search" type="search" placeholder="按密钥名称搜索…" aria-label="搜索密钥">
+            </label>
+            <div class="toolbar-group">
+              <button id="toggle-reveal" class="button secondary">全部显示</button>
+              <button id="add-key" class="button primary">＋ 添加密钥</button>
+            </div>
+          </div>
+          <div class="table-heading" aria-hidden="true"><span>名称</span><span>配置值</span><span>操作</span></div>
+          <div id="secret-rows"></div>
+          <div id="no-keys" class="empty-state compact" hidden>
+            <h3>还没有密钥</h3>
+            <p>点击「添加密钥」，填写名称和对应值即可</p>
+          </div>
+        </div>
+
+        <div id="config-editor" hidden>
+          <label class="sr-only" for="config-content">配置内容</label>
+          <textarea id="config-content" spellcheck="false" autocomplete="off" aria-describedby="editor-description"></textarea>
+        </div>
+
+        <footer id="editor-footer" hidden>
+          <span id="file-path"></span>
+          <span id="save-status">所有更改已保存</span>
+        </footer>
+      </section>
+
+      <p class="page-footnote"><span aria-hidden="true">⌁</span> 密钥默认隐藏，保存时自动加密；切换文件前未保存的更改会提示确认</p>
+    </div>
+  </main>
+
+  <!-- Toast 通知堆栈 -->
+  <div id="toasts" aria-live="polite" role="status"></div>
+
+  <!-- 通用确认弹窗 -->
+  <div id="confirm-modal" class="modal-backdrop" hidden>
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="confirm-title">
+      <h3 id="confirm-title">请确认</h3>
+      <p id="confirm-message"></p>
+      <div class="modal-actions">
+        <button id="confirm-cancel" class="button secondary">取消</button>
+        <button id="confirm-accept" class="button danger">确定</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- age 私钥弹窗 -->
+  <div id="key-modal" class="modal-backdrop" hidden>
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="key-modal-title">
+      <h3 id="key-modal-title">age 私钥</h3>
+      <p class="modal-note">用于解密与核对密钥文件，<strong>仅本次会话有效</strong>：保存在进程内存里，不写文件、不进日志、关闭页面即失效留空提交则清除，回落到环境变量</p>
+      <label class="sr-only" for="key-input">age 私钥</label>
+      <textarea id="key-input" rows="4" spellcheck="false" autocomplete="off" placeholder="AGE-SECRET-KEY-1…（整行粘贴）"></textarea>
+      <div id="key-modal-status" class="modal-status"></div>
+      <div class="modal-actions">
+        <button id="key-modal-cancel" class="button secondary">取消</button>
+        <button id="key-modal-clear" class="button secondary">清除私钥</button>
+        <button id="key-modal-apply" class="button primary">应用</button>
+      </div>
+      <details id="rotate-section" class="rotate-section">
+        <summary>轮换到新密钥</summary>
+        <p class="modal-note">换一套全新的公私钥：全部密文只重写 age 段（<strong>值密文不变，git diff 最小</strong>），.sops.yaml 的公钥一并更新执行前需要当前私钥已就绪</p>
+        <div class="rotate-toolbar">
+          <button id="rotate-generate" class="button secondary" type="button">生成新密钥对</button>
+        </div>
+        <div id="rotate-keypair" class="rotate-keypair" hidden>
+          <label for="rotate-recipient">新公钥（age1 开头；也可直接粘贴你已有的公钥）</label>
+          <input id="rotate-recipient" spellcheck="false" autocomplete="off" placeholder="age1…">
+          <label for="rotate-identity">新私钥（请立即保存，离开页面后不再显示）</label>
+          <textarea id="rotate-identity" rows="3" readonly spellcheck="false"></textarea>
+        </div>
+        <div class="modal-actions">
+          <button id="rotate-run" class="button primary" type="button">执行轮换</button>
+        </div>
+        <div id="rotate-status" class="modal-status"></div>
+      </details>
+    </div>
+  </div>
+</body>
+</html>
