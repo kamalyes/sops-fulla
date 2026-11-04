@@ -49,12 +49,16 @@ jobs:
         run: go test ./... -v
 
       # 真实密文格式回归：上游配置仓库的密文由 sops CLI 生成，
-      # 原生实现必须能按同一格式解析这里先加密一份样本，
+      # 原生实现必须能按同一格式解析这里先加密一份样本
+      # （复用 examples 的公开演示密钥对，runner 无需任何外部工具），
       # 再交给回归用例按「外部密文」解析
+      # 注意私钥要用绝对路径：go test 的工作目录是 service/ 子目录
       - name: 真实密文格式回归
+        env:
+          SOPS_AGE_KEY_FILE: ${{ github.workspace }}/examples/basic/demo-key.txt
         run: |
           mkdir -p /tmp/real-shape/demo/dev
-          printf 'creation_rules:\n  - path_regex: \\.enc\\.(yaml|yml|json)$\n    age: age1j023h829qzjgurprhdfyvamaw9re856986ruynemxc3jgvgrcdsqgw9w2k\n' > /tmp/real-shape/.sops.yaml
+          printf 'creation_rules:\n  - path_regex: \\.enc\\.(yaml|yml|json)$\n    age: age1kxev2e0g0r6a4km5x5rmadrfrkqgv0navtnn5xy4fdsa5cj56q7qj6pfq5\n' > /tmp/real-shape/.sops.yaml
           printf 'TOKEN: shape-check\n' > /tmp/real-shape/demo/dev/secrets.enc.yaml
           go run . --repo /tmp/real-shape encrypt
           FULLA_REAL_CIPHERTEXT=/tmp/real-shape/demo/dev/secrets.enc.yaml \
