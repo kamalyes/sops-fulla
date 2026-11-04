@@ -13,9 +13,11 @@ package models
 
 // Capabilities 描述页面当前可做什么
 type Capabilities struct {
-	SecretsReady bool   `json:"secrets_ready"`
+	SecretsReady bool `json:"secrets_ready"`
+	// HasWorkspace 表示是否已选择配置仓库；false 时页面显示引导卡片
+	HasWorkspace bool   `json:"has_workspace"`
 	Repository   string `json:"repository"`
-	// KeySource 是当前生效的私钥来源：page / env / file，空串表示没有
+	// KeySource 是当前生效的私钥来源：page / env / remembered / file，空串表示没有
 	KeySource string `json:"key_source"`
 }
 

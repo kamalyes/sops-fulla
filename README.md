@@ -56,6 +56,9 @@ sops-fulla --repo /path/to/service-configs
 # 或
 go run . --repo /path/to/service-configs
 
+# 也可以不带 --repo 直接启动，在页面上选择工作区
+sops-fulla
+
 # 换端口 / 不自动开浏览器
 sops-fulla --repo . --port 8766 --no-browser
 
@@ -64,6 +67,14 @@ sops-fulla --repo . --secrets-name credentials.enc.yaml
 ```
 
 默认打开 `http://127.0.0.1:8765`，按 Ctrl+C 退出
+
+### 🗂 多工作区
+
+管理页面支持多工作区：可以不带 `--repo` 直接启动，在页面引导卡片里
+填写仓库路径，或从最近使用过的工作区列表里选择；之后随时在设置
+抽屉的「工作区」区域切换。最近列表保存在本机
+`~/.config/sops-fulla/workspaces.json`（最多 8 个，只保留仍含
+`.sops.yaml` 的目录），也可用 `FULLA_CONFIG_DIR` 改存放位置。
 
 ### 🌱 从零初始化（init）
 
@@ -102,10 +113,12 @@ sops CLI 同样无感
 
 ## 🔑 age 私钥
 
-查看与保存密钥（解密）需要私钥，三选一，优先级从高到低：
+查看与保存密钥（解密）需要私钥，优先级从高到低：
 
 1. **页面左下角私钥状态条（或右侧悬浮栏「设置」）→ 抽屉里直接粘贴** `AGE-SECRET-KEY-1…`
-   —— 仅本次会话有效，保存在进程内存里，不落盘、不进日志
+   —— 仅本次会话有效，保存在进程内存里，不落盘、不进日志；
+   勾选「记住到本机」后存入 `~/.config/sops-fulla/age.key`（0600），
+   下次启动自动加载，随时可在抽屉里清除
 2. 环境变量 `SOPS_AGE_KEY` / `SOPS_AGE_KEY_FILE`
 3. 本机密钥文件 `~/.config/sops/age/keys.txt`
    （macOS 也认 `~/Library/Application Support/sops/age/keys.txt`）

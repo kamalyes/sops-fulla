@@ -55,7 +55,11 @@ func runWeb(svc *service.Service, root string, args []string, options webOptions
 	}
 	url := fmt.Sprintf("http://127.0.0.1:%d", srv.Port())
 	fmt.Printf("配置管理页面：%s\n", url)
-	fmt.Printf("配置仓库：%s\n", root)
+	if root == "" {
+		fmt.Println("配置仓库：未选择，请在页面上选择工作区（之后可随时切换）")
+	} else {
+		fmt.Printf("配置仓库：%s\n", root)
+	}
 	fmt.Printf("版本：%s\n", options.version)
 	fmt.Println("提交、推送及部署仍按现有流程执行按 Ctrl+C 退出")
 	if !*noBrowser {

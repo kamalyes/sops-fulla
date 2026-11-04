@@ -61,7 +61,21 @@
         </div>
       </section>
 
-      <section class="environment-panel">
+      <!-- 空工作区引导：未选择仓库时显示 -->
+      <section id="workspace-guide" class="workspace-guide" hidden>
+        <span class="guide-symbol" aria-hidden="true">≋</span>
+        <h2>选择一个配置仓库</h2>
+        <p>填入包含 .sops.yaml 的仓库路径；也可以从最近使用过的工作区里选择，之后可在设置抽屉里随时切换</p>
+        <div class="guide-input-row">
+          <label class="sr-only" for="workspace-path">配置仓库路径</label>
+          <input id="workspace-path" type="text" spellcheck="false" autocomplete="off" placeholder="例如 E:\WorkSpaces\my-configs 或 /srv/configs">
+          <button id="workspace-open" class="button primary">打开工作区</button>
+        </div>
+        <div id="guide-recents" class="recent-list"></div>
+        <p class="guide-hint">还没有仓库？在终端里运行 <code>sops-fulla --repo &lt;路径&gt; init</code> 可以从零创建</p>
+      </section>
+
+      <section id="environment-panel" class="environment-panel">
         <div>
           <span class="small-label">当前环境</span>
           <div id="environments" class="environment-tabs" role="group" aria-label="选择环境"></div>
@@ -116,7 +130,7 @@
         </footer>
       </section>
 
-      <p class="page-footnote"><span aria-hidden="true">⌁</span> 密钥默认隐藏，保存时自动加密；切换文件前未保存的更改会提示确认</p>
+      <p id="page-footnote" class="page-footnote"><span aria-hidden="true">⌁</span> 密钥默认隐藏，保存时自动加密；切换文件前未保存的更改会提示确认</p>
     </div>
   </main>
 
@@ -167,6 +181,19 @@
 
     <div class="drawer-body">
       <section class="drawer-section">
+        <div class="small-label">工作区</div>
+        <dl class="info-list">
+          <div><dt>当前</dt><dd id="info-workspace">—</dd></div>
+        </dl>
+        <div class="guide-input-row">
+          <label class="sr-only" for="drawer-workspace-path">新的配置仓库路径</label>
+          <input id="drawer-workspace-path" type="text" spellcheck="false" autocomplete="off" placeholder="输入新的仓库路径，回车切换">
+          <button id="drawer-workspace-switch" class="button secondary">切换</button>
+        </div>
+        <div id="drawer-workspace-recents" class="recent-list"></div>
+      </section>
+
+      <section class="drawer-section">
         <div class="small-label">当前状态</div>
         <dl class="info-list">
           <div><dt>仓库</dt><dd id="info-repository">—</dd></div>
@@ -177,11 +204,13 @@
 
       <section class="drawer-section">
         <div class="small-label">页面私钥</div>
-        <p class="modal-note">用于解密与核对密钥文件，<strong>仅本次会话有效</strong>：保存在进程内存里，不写文件、不进日志、关闭页面即失效。留空应用则清除，回落到环境变量。</p>
+        <p class="modal-note">用于解密与核对密钥文件。留空应用则清除，回落到环境变量或本机密钥文件；勾选「记住」后会存进本机 <strong>~/.config/sops-fulla/age.key</strong>（0600 权限），下次启动自动可用。</p>
         <label class="sr-only" for="key-input">age 私钥</label>
         <textarea id="key-input" rows="4" spellcheck="false" autocomplete="off" placeholder="AGE-SECRET-KEY-1…（整行粘贴）"></textarea>
+        <label class="remember-check"><input type="checkbox" id="key-remember">记住到本机，下次启动自动加载</label>
         <div id="key-status" class="drawer-status"></div>
         <div class="modal-actions">
+          <button id="key-forget" class="text-button danger">清除记住的私钥</button>
           <button id="key-modal-clear" class="button secondary">清除私钥</button>
           <button id="key-modal-apply" class="button primary">应用</button>
         </div>

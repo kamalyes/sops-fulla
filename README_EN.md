@@ -65,6 +65,9 @@ sops-fulla --repo /path/to/service-configs
 # or
 go run . --repo /path/to/service-configs
 
+# Or start without --repo and pick the workspace on the page
+sops-fulla
+
 # Custom port / don't auto-open the browser
 sops-fulla --repo . --port 8766 --no-browser
 
@@ -73,6 +76,15 @@ sops-fulla --repo . --secrets-name credentials.enc.yaml
 ```
 
 Opens `http://127.0.0.1:8765` by default; press Ctrl+C to quit.
+
+### 🗂 Multiple Workspaces
+
+The dashboard supports multiple workspaces: start without `--repo`,
+type a repository path into the guide card (or pick one from the recent
+list), and switch anytime via the "Workspace" section of the settings
+drawer. The recent list lives in `~/.config/sops-fulla/workspaces.json`
+(at most 8 entries, only directories still containing `.sops.yaml`),
+and its location can be overridden with `FULLA_CONFIG_DIR`.
 
 ### 🌱 Initialize From Scratch (init)
 
@@ -117,13 +129,15 @@ ciphertext and MAC stay untouched — the sops CLI never notices.
 
 ## 🔑 age Identity
 
-Viewing and saving secrets (decryption) requires the identity, one of
-three options, highest priority first:
+Viewing and saving secrets (decryption) requires the identity,
+highest priority first:
 
 1. **Open Settings via the key status bar at the bottom-left (or the
    floating "Settings" button on the right) and paste it into the drawer**
    (`AGE-SECRET-KEY-1…`) — valid for this session only, kept in process
-   memory, never written to disk or logs
+   memory, never written to disk or logs; tick "Remember on this
+   machine" to store it in `~/.config/sops-fulla/age.key` (0600) so it
+   loads automatically on the next start — clearable in the drawer anytime
 2. Environment variables `SOPS_AGE_KEY` / `SOPS_AGE_KEY_FILE`
 3. The local key file `~/.config/sops/age/keys.txt`
    (on macOS, `~/Library/Application Support/sops/age/keys.txt` too)

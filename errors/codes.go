@@ -26,6 +26,9 @@ const (
 	BizErrCodeJSONOnly            = "error.json_only"
 	BizErrCodeForbidden           = "error.forbidden"
 	BizErrCodeNotFound            = "error.not_found"
+	BizErrCodeNoWorkspace         = "error.no_workspace"
+	BizErrCodeWorkspaceInvalid    = "error.workspace_invalid"
+	BizErrCodeRememberFailed      = "error.remember_failed"
 
 	// ============================================
 	// 文档形状

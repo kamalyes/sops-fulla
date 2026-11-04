@@ -39,6 +39,9 @@ func (s *Service) RotateAll(recipient string) (*models.RotateResult, error) {
 
 	s.lock.Lock()
 	defer s.lock.Unlock()
+	if s.repo == nil {
+		return nil, errNoWorkspace()
+	}
 
 	// 阶段一：逐份在内存里轮换，任何一份失败都直接返回，磁盘不动
 	targets := s.repo.EncryptedFiles()
@@ -49,7 +52,7 @@ func (s *Service) RotateAll(recipient string) (*models.RotateResult, error) {
 	}
 	pending := make([]rotated, 0, len(targets))
 	for _, target := range targets {
-		rel, err := relativePath(s.Root(), target)
+		rel, err := relativePath(s.rootLocked(), target)
 		if err != nil {
 			return nil, err
 		}
@@ -64,7 +67,7 @@ func (s *Service) RotateAll(recipient string) (*models.RotateResult, error) {
 		pending = append(pending, rotated{target: target, rel: rel, output: output})
 	}
 
-	rulesPath := filepath.Join(s.Root(), ".sops.yaml")
+	rulesPath := filepath.Join(s.rootLocked(), ".sops.yaml")
 	rules, hasRules := s.repo.ReadFile(rulesPath)
 	var updatedRules []byte
 	rulesChanged := false

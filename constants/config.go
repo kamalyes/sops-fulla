@@ -26,9 +26,26 @@ const (
 	EnvAgeKeyFile = "SOPS_AGE_KEY_FILE"
 )
 
+// EnvConfigDir 覆盖本工具配置目录（记住的私钥、最近工作区列表）的环境变量
+const EnvConfigDir = "FULLA_CONFIG_DIR"
+
 // 私钥来源标识：page（页面填写）> env（环境变量）> file（本机密钥文件）
+// remembered 是本工具记住的私钥文件，优先级在标准 sops 密钥文件之前
 const (
-	KeySourcePage = "page"
-	KeySourceEnv  = "env"
-	KeySourceFile = "file"
+	KeySourcePage       = "page"
+	KeySourceEnv        = "env"
+	KeySourceFile       = "file"
+	KeySourceRemembered = "remembered"
+)
+
+const (
+	// AppConfigDirName 本工具在用户配置目录下的专属目录名：
+	// 记住的 age 私钥与最近工作区列表都放在这里
+	AppConfigDirName = "sops-fulla"
+	// RememberedKeyFileName 记住的 age 私钥文件名
+	RememberedKeyFileName = "age.key"
+	// WorkspacesFileName 最近工作区列表文件名
+	WorkspacesFileName = "workspaces.json"
+	// MaxRecentWorkspaces 最近工作区列表的保留上限
+	MaxRecentWorkspaces = 8
 )

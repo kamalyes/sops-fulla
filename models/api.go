@@ -54,3 +54,14 @@ type KeyPair struct {
 	Recipient string `json:"recipient"` // 公钥（age1…），进 .sops.yaml
 	Identity  string `json:"identity"`  // 私钥（AGE-SECRET-KEY-…），请妥善备份
 }
+
+// WorkspaceRequest 是 /api/workspace 的请求：要切换到的配置仓库路径
+type WorkspaceRequest struct {
+	Path string `json:"path"`
+}
+
+// WorkspacesResponse 是 /api/workspaces 的返回：当前工作区与最近列表
+type WorkspacesResponse struct {
+	Current string   `json:"current"`
+	Recent  []string `json:"recent"`
+}

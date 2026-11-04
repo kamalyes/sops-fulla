@@ -61,7 +61,7 @@ $("confirm-modal").onclick = (event) => { if (event.target === $("confirm-modal"
 /* ---------- age 私钥弹窗 ---------- */
 
 function keySourceLabel(source) {
-  return { page: "页面提供的私钥", env: "环境变量中的私钥", file: "本机密钥文件" }[source] || "";
+  return { page: "页面提供的私钥", env: "环境变量中的私钥", remembered: "记住的私钥（本机）", file: "本机密钥文件" }[source] || "";
 }
 
 function renderKeyStatus() {
@@ -79,10 +79,13 @@ function renderKeyStatus() {
 
 function openSettings() {
   $("key-input").value = "";
+  $("key-remember").checked = false;
   const ready = state.catalog?.secrets_ready;
   $("key-status").textContent = ready
     ? "当前已使用" + keySourceLabel(state.catalog.key_source) + "。粘贴新的私钥并应用可替换；留空应用或点「清除私钥」则回落到环境变量"
-    : "尚未配置可用的私钥：查看与保存密钥前需要先填写。也可以改用环境变量 SOPS_AGE_KEY / SOPS_AGE_KEY_FILE";
+    : "尚未配置可用的私钥：查看与保存密钥前需要先填写。也可以改用环境变量 SOPS_AGE_KEY / SOPS_AGE_KEY_FILE，或勾选「记住」让下次启动自动加载";
+  $("drawer-workspace-path").value = "";
+  refreshRecents();
   $("drawer-backdrop").hidden = false;
   $("settings-drawer").hidden = false;
   $("key-input").focus();
@@ -93,8 +96,8 @@ function closeSettings() {
   $("drawer-backdrop").hidden = true;
 }
 
-async function applyPageKey(secret, { clear = false } = {}) {
-  const result = await api("/api/key", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ secret }) });
+async function applyPageKey(secret, { clear = false, remember = false } = {}) {
+  const result = await api("/api/key", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ secret, remember }) });
   state.catalog.secrets_ready = result.secrets_ready;
   state.catalog.key_source = result.key_source;
   renderKeyStatus();
@@ -113,11 +116,108 @@ $("key-modal-clear").onclick = async () => {
 };
 $("key-modal-apply").onclick = async () => {
   const secret = $("key-input").value.trim();
-  try { await applyPageKey(secret); if (secret) closeSettings(); }
+  try { await applyPageKey(secret, { remember: $("key-remember").checked }); if (secret) closeSettings(); }
   catch (error) { $("key-status").textContent = error.message; }
+};
+$("key-forget").onclick = async () => {
+  try {
+    const result = await api("/api/key", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ secret: "", forget_remembered: true }) });
+    if (state.catalog) {
+      state.catalog.secrets_ready = result.secrets_ready;
+      state.catalog.key_source = result.key_source;
+    }
+    renderKeyStatus();
+    toast(result.message, "info");
+    if (state.filename) await loadFile();
+  } catch (error) { toast(error.message, "error"); }
 };
 $("key-input").onkeydown = (event) => {
   if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) { event.preventDefault(); $("key-modal-apply").click(); }
+};
+
+/* ---------- 工作区：选择 / 切换 / 最近列表 ---------- */
+
+function renderRecentsInto(host, info) {
+  host.replaceChildren();
+  const items = (info.recent || []).filter((path) => path !== info.current);
+  if (!items.length) {
+    host.append(element("div", "recents-empty", "还没有最近的工作区记录"));
+    return;
+  }
+  for (const path of items) {
+    const button = element("button", "recent-item");
+    button.type = "button";
+    button.title = path;
+    button.append(element("span", "recent-name", path.split(/[\\/]/).pop() || path));
+    button.append(element("span", "recent-path", path));
+    button.onclick = () => switchWorkspace(path);
+    host.append(button);
+  }
+}
+
+async function refreshRecents() {
+  try {
+    const info = await api("/api/workspaces");
+    renderRecentsInto($("guide-recents"), info);
+    renderRecentsInto($("drawer-workspace-recents"), info);
+    $("info-workspace").textContent = info.current || "未选择";
+    if (info.current) $("drawer-workspace-path").placeholder = info.current;
+  } catch { /* 最近列表拿不到不影响使用 */ }
+}
+
+function showWorkspacePanels(hasWorkspace) {
+  $("workspace-guide").hidden = hasWorkspace;
+  for (const id of ["environment-panel", "files", "editor-card", "page-footnote"]) {
+    $(id).hidden = !hasWorkspace;
+  }
+}
+
+function applyCatalog(catalog) {
+  state.catalog = catalog;
+  state.service = ""; state.environment = ""; state.filename = "";
+  state.file = null; state.rows = []; state.dirty = false;
+  const hasWorkspace = Boolean(catalog.has_workspace);
+  showWorkspacePanels(hasWorkspace);
+  $("repository-name").textContent = hasWorkspace ? (catalog.repository || "本地工作区") : "未选择工作区";
+  $("service-count").textContent = catalog.services.length;
+  renderServices();
+  renderNavigation();
+  renderKeyStatus();
+  if (!hasWorkspace) {
+    refreshRecents();
+    return;
+  }
+  if (!catalog.services.length) {
+    $("empty").hidden = false;
+    $("empty").querySelector("h3").textContent = "当前仓库还没有配置文件";
+    $("empty").querySelector("p").textContent = "请先在仓库里放置 YAML / JSON 配置（目录层级不限）";
+    return;
+  }
+  state.service = catalog.services[0].name;
+  state.environment = selectedService().environments[0].name;
+  chooseFile(); renderNavigation(); loadFile();
+}
+
+async function switchWorkspace(path) {
+  path = (path || "").trim();
+  if (!path) { toast("请填写配置仓库路径", "error"); return; }
+  if (!(await canLeave())) return;
+  state.busy = true; controls();
+  try {
+    const catalog = await api("/api/workspace", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ path }) });
+    applyCatalog(catalog);
+    toast("已切换工作区：" + (catalog.repository || path));
+  } catch (error) { toast(error.message, "error"); }
+  finally { state.busy = false; controls(); }
+}
+
+$("workspace-open").onclick = () => switchWorkspace($("workspace-path").value);
+$("workspace-path").onkeydown = (event) => {
+  if (event.key === "Enter") { event.preventDefault(); $("workspace-open").click(); }
+};
+$("drawer-workspace-switch").onclick = () => switchWorkspace($("drawer-workspace-path").value);
+$("drawer-workspace-path").onkeydown = (event) => {
+  if (event.key === "Enter") { event.preventDefault(); $("drawer-workspace-switch").click(); }
 };
 
 /* ---------- 密钥轮换 ---------- */
@@ -436,17 +536,6 @@ window.addEventListener("keydown", (event) => {
 
 (async () => {
   try {
-    state.catalog = await api("/api/catalog");
-    $("repository-name").textContent = state.catalog.repository;
-    $("service-count").textContent = state.catalog.services.length;
-    renderKeyStatus();
-    if (!state.catalog.services.length) {
-      $("empty").querySelector("h3").textContent = "当前仓库还没有配置文件";
-      $("empty").querySelector("p").textContent = "请先在仓库里放置 YAML / JSON 配置（目录层级不限）";
-      return;
-    }
-    state.service = state.catalog.services[0].name;
-    state.environment = selectedService().environments[0].name;
-    chooseFile(); renderNavigation(); await loadFile();
+    applyCatalog(await api("/api/catalog"));
   } catch (error) { toast(error.message, "error"); }
 })();

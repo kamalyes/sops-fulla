@@ -139,6 +139,10 @@ func (s *Server) route(w http.ResponseWriter, r *http.Request) error {
 			return err
 		}
 		return sendJSON(w, http.StatusOK, data)
+	case r.Method == http.MethodGet && r.URL.Path == "/api/workspaces":
+		return sendJSON(w, http.StatusOK, s.svc.WorkspacesInfo())
+	case r.Method == http.MethodPost && r.URL.Path == "/api/workspace":
+		return s.handleWorkspace(w, r)
 	case r.Method == http.MethodPost && r.URL.Path == "/api/key":
 		return s.handleKey(w, r)
 	case r.Method == http.MethodPost && r.URL.Path == "/api/keypair":
@@ -155,16 +159,45 @@ func (s *Server) route(w http.ResponseWriter, r *http.Request) error {
 	return errors.New(404, errors.BizErrCodeNotFound, "页面不存在")
 }
 
+// handleWorkspace 切换到另一个配置仓库，成功后直接返回新目录，
+// 页面一次往返就能完成刷新
+func (s *Server) handleWorkspace(w http.ResponseWriter, r *http.Request) error {
+	body, err := readJSONBody(r)
+	if err != nil {
+		return err
+	}
+	var request models.WorkspaceRequest
+	if err := json.Unmarshal(body, &request); err != nil {
+		return errors.New(400, errors.BizErrCodeInvalidRequest, "请求格式无效")
+	}
+	if err := s.svc.SwitchRoot(request.Path); err != nil {
+		return err
+	}
+	return sendJSON(w, http.StatusOK, s.svc.Catalog())
+}
+
 func (s *Server) handleKey(w http.ResponseWriter, r *http.Request) error {
 	body, err := readJSONBody(r)
 	if err != nil {
 		return err
 	}
 	var request struct {
-		Secret string `json:"secret"`
+		Secret           string `json:"secret"`
+		Remember         bool   `json:"remember"`
+		ForgetRemembered bool   `json:"forget_remembered"`
 	}
 	if err := json.Unmarshal(body, &request); err != nil {
 		return errors.New(400, errors.BizErrCodeInvalidRequest, "请求格式无效")
+	}
+	if request.ForgetRemembered {
+		if _, err := s.svc.ForgetRememberedKey(); err != nil {
+			return err
+		}
+		return sendJSON(w, http.StatusOK, map[string]any{
+			"secrets_ready": s.svc.Capabilities().SecretsReady,
+			"key_source":    s.svc.Capabilities().KeySource,
+			"message":       "已清除记住的私钥，下次启动不再自动加载",
+		})
 	}
 	capabilities, err := s.svc.SetPageKey(request.Secret)
 	if err != nil {
@@ -172,7 +205,14 @@ func (s *Server) handleKey(w http.ResponseWriter, r *http.Request) error {
 	}
 	message := "已清除页面私钥，回落到环境变量或本机密钥文件"
 	if request.Secret != "" {
-		message = "已应用页面提供的私钥，仅本次会话有效，不会保存"
+		if request.Remember {
+			if _, err := s.svc.RememberKey(request.Secret); err != nil {
+				return err
+			}
+			message = "已应用页面提供的私钥，并记住到本机（下次启动自动可用）"
+		} else {
+			message = "已应用页面提供的私钥，仅本次会话有效，不会保存"
+		}
 	}
 	return sendJSON(w, http.StatusOK, map[string]any{
 		"secrets_ready": capabilities.SecretsReady,

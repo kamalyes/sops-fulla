@@ -29,21 +29,25 @@ import (
 
 // Service 是配置仓库的读写视图
 type Service struct {
-	// repo 负责目录扫描、路径校验与文件读写约定
+	// repo 负责目录扫描、路径校验与文件读写约定；nil 表示尚未选择工作区
 	repo *repository.Repository
+
+	// secretsName 记住密钥文件约定名，切换工作区后重放
+	secretsName string
 
 	keyMu      sync.Mutex
 	envSecret  string // 启动时从环境变量 / 密钥文件读到的一份
-	envSource  string // env | file | ""
+	envSource  string // env | remembered | file | ""
 	pageSecret string // 页面提供的私钥，仅内存，不落盘
 	parsedPage agekey.ParsedIdentities
 	parsedEnv  agekey.ParsedIdentities // nil 表示尚未解析
 
-	lock sync.Mutex // 保存串行化
+	lock sync.Mutex // 保存串行化，也保护 repo 指针的切换
 }
 
 // New 创建服务视图，并按 sops 的约定读取环境里的 age 私钥：
-// SOPS_AGE_KEY、SOPS_AGE_KEY_FILE，以及标准的本机密钥文件路径
+// SOPS_AGE_KEY、SOPS_AGE_KEY_FILE，以及标准的本机密钥文件路径；
+// root 为空串时创建「空工作区」，等页面选择仓库后再切换
 func New(root string) *Service {
 	return newService(root, true)
 }
@@ -54,52 +58,113 @@ func NewIsolated(root string) *Service {
 }
 
 func newService(root string, readEnvironment bool) *Service {
-	svc := &Service{repo: repository.New(root)}
+	svc := &Service{}
+	if root != "" {
+		svc.repo = repository.New(root)
+	}
 	if readEnvironment {
 		svc.envSecret, svc.envSource = environmentKey()
 	}
 	return svc
 }
 
-// Root 返回仓库根目录的绝对路径
-func (s *Service) Root() string { return s.repo.Root }
+// Root 返回仓库根目录的绝对路径；未选择工作区时返回空串
+func (s *Service) Root() string {
+	s.lock.Lock()
+	defer s.lock.Unlock()
+	return s.rootLocked()
+}
+
+// rootLocked 返回仓库根目录（须持有 lock）
+func (s *Service) rootLocked() string {
+	if s.repo == nil {
+		return ""
+	}
+	return s.repo.Root
+}
 
 // SetSecretsName 换掉密钥文件名的约定（例如仓库结构改用
 // credentials.enc.yaml）默认约定名之外的名字同样会被当作密钥文件
-// 对待；只应在服务启动前调用
+// 对待；只应在服务启动前或切换工作区后调用
 func (s *Service) SetSecretsName(name string) {
-	s.repo.SetSecretsName(name)
+	s.lock.Lock()
+	defer s.lock.Unlock()
+	s.secretsName = name
+	if s.repo != nil {
+		s.repo.SetSecretsName(name)
+	}
 }
 
-// Catalog 扫描仓库目录树，附带当前的能力信息
+// SwitchRoot 切换到另一个配置仓库：目录里必须已有 .sops.yaml；
+// 密钥文件约定名会跟着带过去
+func (s *Service) SwitchRoot(root string) error {
+	root = strings.TrimSpace(root)
+	if root == "" {
+		return errors.New(400, errors.BizErrCodeInvalidRequest, "请填写配置仓库路径")
+	}
+	absolute, err := filepath.Abs(root)
+	if err != nil || !HasSopsRules(absolute) {
+		return errors.New(400, errors.BizErrCodeWorkspaceInvalid, "该目录缺少 .sops.yaml，不是有效的配置仓库")
+	}
+	s.lock.Lock()
+	defer s.lock.Unlock()
+	s.repo = repository.New(absolute)
+	s.repo.SetSecretsName(s.secretsName)
+	TouchWorkspace(absolute)
+	return nil
+}
+
+// WorkspacesInfo 返回当前工作区与最近使用过的列表
+func (s *Service) WorkspacesInfo() models.WorkspacesResponse {
+	return models.WorkspacesResponse{Current: s.Root(), Recent: RecentWorkspaces()}
+}
+
+// Catalog 扫描仓库目录树，附带当前的能力信息；空工作区返回空目录
 func (s *Service) Catalog() models.Catalog {
-	catalog := s.repo.Catalog()
+	s.lock.Lock()
+	repo := s.repo
+	s.lock.Unlock()
+	catalog := models.Catalog{Services: []models.Service{}}
+	if repo != nil {
+		catalog.Services = repo.Catalog().Services
+	}
 	catalog.Capabilities = s.Capabilities()
 	return catalog
+}
+
+// errNoWorkspace 是空工作区下读写操作的统一报错
+func errNoWorkspace() *errors.Error {
+	return errors.New(400, errors.BizErrCodeNoWorkspace, "请先选择配置仓库")
 }
 
 // Read 读取一个配置文件；密文先在内存里解密，磁盘上的内容不动
 // service / environment 可为空、environment 允许多级路径，兼容任意放置
 func (s *Service) Read(service, environment, filename string) (*models.FileData, error) {
-	target, err := s.repo.Resolve(service, environment, filename)
+	s.lock.Lock()
+	repo := s.repo
+	s.lock.Unlock()
+	if repo == nil {
+		return nil, errNoWorkspace()
+	}
+	target, err := repo.Resolve(service, environment, filename)
 	if err != nil {
 		return nil, err
 	}
 	kind := models.FileKind(filename)
-	raw, exists := s.repo.ReadFile(target)
+	raw, exists := repo.ReadFile(target)
 	data := raw
 	if exists && models.IsEncryptedFile(filename) && models.IsEncryptedContent(raw, kind) {
 		if data, err = crypto.Decrypt(raw, kind, s.Identities()); err != nil {
 			return nil, err
 		}
 	}
-	result := &models.FileData{Filename: filename, Kind: s.repo.FileKindName(filename)}
+	result := &models.FileData{Filename: filename, Kind: repo.FileKindName(filename)}
 	if exists {
 		revision := repository.RevisionOf(raw)
 		result.Revision = &revision
 	}
 	text := string(data)
-	if s.repo.IsSecretsFile(filename) {
+	if repo.IsSecretsFile(filename) {
 		result.Values = &models.Value{Kind: models.KindMapping, Tag: "!!map", Map: []models.Entry{}}
 		if text != "" {
 			document, err := models.ParseDocument(text, kind)
@@ -120,14 +185,16 @@ func (s *Service) Read(service, environment, filename string) (*models.FileData,
 
 // Save 校验并写入一个配置文件；密文文件会先加密、解回来核对，一致才落盘
 func (s *Service) Save(request *models.SaveRequest) (*models.SaveResult, error) {
+	s.lock.Lock()
+	defer s.lock.Unlock()
+	if s.repo == nil {
+		return nil, errNoWorkspace()
+	}
 	target, err := s.repo.Resolve(request.Service, request.Environment, request.Filename)
 	if err != nil {
 		return nil, err
 	}
 	kind := models.FileKind(request.Filename)
-
-	s.lock.Lock()
-	defer s.lock.Unlock()
 
 	original, exists := s.repo.ReadFile(target)
 	if !repository.SameRevision(original, exists, request.Revision) {
@@ -143,12 +210,12 @@ func (s *Service) Save(request *models.SaveRequest) (*models.SaveResult, error) 
 
 	output := plain
 	if models.IsEncryptedFile(request.Filename) {
-		relPath, err := relativePath(s.Root(), target)
+		relPath, err := relativePath(s.rootLocked(), target)
 		if err != nil {
 			return nil, err
 		}
 		// 只重加密变化的值：未变的值沿用旧密文，diff 里只有真正改动的行
-		output, err = crypto.EncryptSaving(s.Root(), original, plain, kind, relPath, s.Identities())
+		output, err = crypto.EncryptSaving(s.rootLocked(), original, plain, kind, relPath, s.Identities())
 		if err != nil {
 			return nil, err
 		}

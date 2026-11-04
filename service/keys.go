@@ -24,7 +24,8 @@ import (
 )
 
 // environmentKey 按 sops CLI 的约定读环境里的 age 私钥：
-// SOPS_AGE_KEY、SOPS_AGE_KEY_FILE，以及标准的本机密钥文件路径
+// SOPS_AGE_KEY、SOPS_AGE_KEY_FILE，本工具记住的私钥，
+// 以及标准的本机密钥文件路径
 func environmentKey() (secret, source string) {
 	if key := os.Getenv(constants.EnvAgeKey); strings.TrimSpace(key) != "" {
 		return key, constants.KeySourceEnv
@@ -34,6 +35,11 @@ func environmentKey() (secret, source string) {
 			return string(data), constants.KeySourceFile
 		}
 		return "", ""
+	}
+	if path, err := rememberedKeyPath(); err == nil {
+		if data, err := os.ReadFile(path); err == nil && strings.TrimSpace(string(data)) != "" {
+			return string(data), constants.KeySourceRemembered
+		}
 	}
 	for _, candidate := range standardAgeKeyPaths() {
 		if data, err := os.ReadFile(candidate); err == nil && strings.TrimSpace(string(data)) != "" {
@@ -102,17 +108,25 @@ func (s *Service) Identities() agekey.ParsedIdentities {
 }
 
 // Capabilities 汇报当前可用的能力
+// 先拿 lock 再拿 keyMu：与 Save / RotateAll 的加锁顺序一致，避免反向死锁
 func (s *Service) Capabilities() models.Capabilities {
+	s.lock.Lock()
+	defer s.lock.Unlock()
 	s.keyMu.Lock()
 	defer s.keyMu.Unlock()
 	return s.capabilitiesLocked()
 }
 
-// capabilitiesLocked 汇报当前可用的能力（须持有 keyMu）
+// capabilitiesLocked 汇报当前可用的能力（须同时持有 lock 与 keyMu）
 func (s *Service) capabilitiesLocked() models.Capabilities {
+	repository := ""
+	if root := s.rootLocked(); root != "" {
+		repository = filepath.Base(root)
+	}
 	return models.Capabilities{
 		SecretsReady: len(s.identitiesLocked()) > 0,
-		Repository:   filepath.Base(s.Root()),
+		HasWorkspace: s.repo != nil,
+		Repository:   repository,
 		KeySource:    s.keySourceLocked(),
 	}
 }
@@ -121,6 +135,8 @@ func (s *Service) capabilitiesLocked() models.Capabilities {
 // 私钥只保存在进程内存里，不会写进任何文件或日志
 func (s *Service) SetPageKey(secret string) (models.Capabilities, error) {
 	secret = strings.TrimSpace(secret)
+	s.lock.Lock()
+	defer s.lock.Unlock()
 	s.keyMu.Lock()
 	defer s.keyMu.Unlock()
 	if secret != "" {
@@ -134,5 +150,53 @@ func (s *Service) SetPageKey(secret string) (models.Capabilities, error) {
 		s.pageSecret = ""
 		s.parsedPage = nil
 	}
+	return s.capabilitiesLocked(), nil
+}
+
+// RememberKey 把 age 私钥写进本工具的专属配置文件，下次启动自动可用；
+// 只在本机存放（0600 权限），内容不进仓库、不进日志
+func (s *Service) RememberKey(secret string) (models.Capabilities, error) {
+	secret = strings.TrimSpace(secret)
+	if secret == "" {
+		return s.ForgetRememberedKey()
+	}
+	identities := agekey.ParsedIdentities{}
+	if err := identities.Import(secret); err != nil || len(identities) == 0 {
+		return models.Capabilities{}, errors.New(400, errors.BizErrCodeInvalidAgeKey, "这不是有效的 age 私钥，应以 AGE-SECRET-KEY- 开头")
+	}
+	path, err := rememberedKeyPath()
+	if err != nil {
+		return models.Capabilities{}, err
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		return models.Capabilities{}, errors.New(500, errors.BizErrCodeRememberFailed, "记住私钥失败：无法创建配置目录")
+	}
+	if err := os.WriteFile(path, []byte(secret+"\n"), 0o600); err != nil {
+		return models.Capabilities{}, errors.New(500, errors.BizErrCodeRememberFailed, "记住私钥失败：无法写入本机配置文件")
+	}
+
+	s.lock.Lock()
+	defer s.lock.Unlock()
+	s.keyMu.Lock()
+	defer s.keyMu.Unlock()
+	s.envSecret, s.envSource = secret, constants.KeySourceRemembered
+	s.parsedEnv = identities
+	return s.capabilitiesLocked(), nil
+}
+
+// ForgetRememberedKey 删除记住的私钥文件，并回落到环境变量或标准密钥文件
+func (s *Service) ForgetRememberedKey() (models.Capabilities, error) {
+	if path, err := rememberedKeyPath(); err == nil {
+		if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+			return models.Capabilities{}, errors.New(500, errors.BizErrCodeRememberFailed, "清除记住的私钥失败")
+		}
+	}
+
+	s.lock.Lock()
+	defer s.lock.Unlock()
+	s.keyMu.Lock()
+	defer s.keyMu.Unlock()
+	s.envSecret, s.envSource = environmentKey()
+	s.parsedEnv = nil
 	return s.capabilitiesLocked(), nil
 }

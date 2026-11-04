@@ -237,3 +237,126 @@ func TestUnknownPathReturns404(t *testing.T) {
 		t.Fatalf("未知接口应 404，实际 %d", status)
 	}
 }
+
+// newEmptyWorkspaceServer 建一个空工作区的测试服务（免仓库启动的形态）
+func newEmptyWorkspaceServer(t *testing.T) (*Server, string) {
+	t.Helper()
+	t.Setenv("FULLA_CONFIG_DIR", t.TempDir())
+	srv := New(service.NewIsolated(""))
+	if err := srv.Start("127.0.0.1:0"); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { srv.Close() })
+	return srv, fmt.Sprintf("http://127.0.0.1:%d", srv.Port())
+}
+
+// workspaceBody 构造 /api/workspace 的请求体（json.Marshal 处理路径转义）
+func workspaceBody(path string) []byte {
+	data, _ := json.Marshal(map[string]string{"path": path})
+	return data
+}
+
+// TestWorkspaceSwitchOverHTTP 验证空工作区启动后通过接口选择并切换仓库
+func TestWorkspaceSwitchOverHTTP(t *testing.T) {
+	srv, base := newEmptyWorkspaceServer(t)
+
+	// 空工作区：目录为空、能力标记无工作区
+	status, body := request(t, http.MethodGet, base+"/api/catalog", srv.Token(), "", nil)
+	if status != http.StatusOK {
+		t.Fatalf("空工作区目录应 200，实际 %d", status)
+	}
+	var catalog struct {
+		Services     []map[string]any `json:"services"`
+		HasWorkspace bool             `json:"has_workspace"`
+	}
+	if err := json.Unmarshal([]byte(body), &catalog); err != nil {
+		t.Fatal(err)
+	}
+	if catalog.HasWorkspace || len(catalog.Services) != 0 {
+		t.Fatalf("应是无工作区的空目录，实际 %s", body)
+	}
+
+	// 最近列表初始为空
+	status, body = request(t, http.MethodGet, base+"/api/workspaces", srv.Token(), "", nil)
+	if status != http.StatusOK || !strings.Contains(body, `"recent":[]`) {
+		t.Fatalf("最近列表应为空，实际 %d：%s", status, body)
+	}
+
+	// 切换到缺 .sops.yaml 的目录应 400
+	bad := t.TempDir()
+	if status, _ := request(t, http.MethodPost, base+"/api/workspace", srv.Token(), "application/json", workspaceBody(bad)); status != http.StatusBadRequest {
+		t.Fatalf("无效目录应 400，实际 %d", status)
+	}
+
+	// 切换到有效仓库：返回新目录
+	root := t.TempDir()
+	identity, err := age.GenerateX25519Identity()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := writeTestFile(filepath.Join(root, ".sops.yaml"), "creation_rules:\n"+
+		"  - path_regex: \\.enc\\.(yaml|yml|json)$\n"+
+		"    age: "+identity.Recipient().String()+"\n"); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeTestFile(filepath.Join(root, "demo", "dev", "config.dev.yaml"), "Name: demo\n"); err != nil {
+		t.Fatal(err)
+	}
+	status, body = request(t, http.MethodPost, base+"/api/workspace", srv.Token(), "application/json", workspaceBody(root))
+	if status != http.StatusOK {
+		t.Fatalf("切换工作区应 200，实际 %d：%s", status, body)
+	}
+	if !strings.Contains(body, `"has_workspace":true`) || !strings.Contains(body, `"repository":"`+filepath.Base(root)+`"`) {
+		t.Fatalf("切换后应返回带新仓库的目录，实际 %s", body)
+	}
+
+	// 最近列表记录了新工作区
+	status, body = request(t, http.MethodGet, base+"/api/workspaces", srv.Token(), "", nil)
+	if status != http.StatusOK {
+		t.Fatalf("最近列表应 200，实际 %d", status)
+	}
+	var info struct {
+		Current string   `json:"current"`
+		Recent  []string `json:"recent"`
+	}
+	if err := json.Unmarshal([]byte(body), &info); err != nil {
+		t.Fatal(err)
+	}
+	if filepath.Base(info.Current) != filepath.Base(root) ||
+		len(info.Recent) != 1 || filepath.Base(info.Recent[0]) != filepath.Base(root) {
+		t.Fatalf("最近列表应记录新工作区，实际 %+v", info)
+	}
+}
+
+// TestRememberKeyOverHTTP 验证 /api/key 的记住与清除私钥扩展
+func TestRememberKeyOverHTTP(t *testing.T) {
+	srv, base := newEmptyWorkspaceServer(t)
+	identity, err := age.GenerateX25519Identity()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// 记住私钥：来源标记 remembered
+	status, body := request(t, http.MethodPost, base+"/api/key", srv.Token(), "application/json",
+		[]byte(`{"secret":"`+identity.String()+`","remember":true}`))
+	if status != http.StatusOK || !strings.Contains(body, `"key_source":"page"`) {
+		t.Fatalf("记住后页面私钥仍应优先（page），实际 %d：%s", status, body)
+	}
+
+	// 清除页面私钥后回落到 remembered
+	status, body = request(t, http.MethodPost, base+"/api/key", srv.Token(), "application/json", []byte(`{"secret":""}`))
+	if status != http.StatusOK || !strings.Contains(body, `"key_source":"remembered"`) {
+		t.Fatalf("清除页面私钥后应回落到 remembered，实际 %d：%s", status, body)
+	}
+
+	// 无效私钥应 400
+	if status, _ := request(t, http.MethodPost, base+"/api/key", srv.Token(), "application/json", []byte(`{"secret":"oops","remember":true}`)); status != http.StatusBadRequest {
+		t.Fatalf("无效私钥应 400，实际 %d", status)
+	}
+
+	// 清除记住的私钥：来源不再来自 remembered
+	status, body = request(t, http.MethodPost, base+"/api/key", srv.Token(), "application/json", []byte(`{"forget_remembered":true}`))
+	if status != http.StatusOK || strings.Contains(body, `"key_source":"remembered"`) {
+		t.Fatalf("清除后不应再是 remembered，实际 %d：%s", status, body)
+	}
+}

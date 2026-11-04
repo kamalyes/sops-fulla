@@ -37,11 +37,15 @@ const usage = `sops-fulla —— 通用的本地配置仓库管理面板
 
 从零开始不用装 sops：init 会生成 age 密钥并写好 .sops.yaml；
 加解密在进程内原生完成解密需要 age 私钥：
-页面在「私钥」弹窗里填写（优先），或配置 SOPS_AGE_KEY / SOPS_AGE_KEY_FILE，
-或把私钥放在 ~/.config/sops/age/keys.txt
+页面在设置抽屉里填写（优先），或配置 SOPS_AGE_KEY / SOPS_AGE_KEY_FILE，
+或把私钥放在 ~/.config/sops/age/keys.txt；
+页面上勾选「记住」后私钥存进本机 ~/.config/sops-fulla/age.key，下次启动自动可用
+
+管理页面支持多工作区：可以不带 --repo 直接启动，在页面上选择仓库路径，
+并在设置抽屉里随时切换最近使用过的工作区
 
 flags：
-  --repo <路径>            配置仓库路径，默认当前目录
+  --repo <路径>            配置仓库路径，默认当前目录；页面启动时可不指定
   --port <端口>            页面端口，默认 8765
   --no-browser             不自动打开浏览器
   --secrets-name <文件名>   密钥文件约定名，默认 secrets.enc.yaml
@@ -89,7 +93,11 @@ func Run(args []string, version string) int {
 	if command == "init" {
 		return RunInit(root, args, os.Stdout, os.Stderr)
 	}
-	if !hasSopsRules(root) {
+	if !service.HasSopsRules(root) {
+		// 管理页面可以不带仓库启动：页面上再选择或切换工作区
+		if command == "web" {
+			return runWeb(service.New(""), "", args, webOptions{port: *port, noBrowser: *noBrowser, secretsName: *secretsName, version: version})
+		}
 		fmt.Fprintln(os.Stderr, "请通过 --repo 指定配置仓库路径，该目录应包含 .sops.yaml")
 		return 1
 	}
@@ -104,10 +112,4 @@ func Run(args []string, version string) int {
 		fmt.Fprintf(os.Stderr, "不认识的子命令：%s\n%s", command, usage)
 		return 1
 	}
-}
-
-// hasSopsRules 判断目录里是否有 .sops.yaml 加密规则文件
-func hasSopsRules(root string) bool {
-	info, err := os.Stat(filepath.Join(root, ".sops.yaml"))
-	return err == nil && !info.IsDir()
 }
