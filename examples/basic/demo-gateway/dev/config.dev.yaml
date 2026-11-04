@@ -1,0 +1,4 @@
+# 明文运行配置：文件名不带 .enc.，不会被加密，直接改即可
+name: demo-gateway
+port: 8080
+log_level: info

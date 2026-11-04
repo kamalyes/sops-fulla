@@ -1,0 +1,3 @@
+# sops-fulla 示例仓库的演示私钥 —— 公开演示材料，请勿用于生产！
+# 任何拿到这个文件的人都能解开 examples/basic 里的全部密文
+AGE-SECRET-KEY-1MTXLLPAGSJY64N0EPV38RG42DNTAANJ9NFVRLCK4Z03GPUCK45CSLK8AAT

@@ -1,0 +1,4 @@
+creation_rules:
+  # 文件名带 .enc. 的 yaml/yml/json 才加密，其余按明文管理
+  - path_regex: \.enc\.(yaml|yml|json)$
+    age: age1kxev2e0g0r6a4km5x5rmadrfrkqgv0navtnn5xy4fdsa5cj56q7qj6pfq5
