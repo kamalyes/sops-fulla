@@ -113,17 +113,26 @@ jobs:
       # UPX 压缩：sops 官方库带了不少依赖，Go 二进制默认偏大，
       # 压缩后通常缩小 60% 以上UPX 5.x 不支持 macOS（darwin 跳过），
       # linux / windows 全覆盖
+      - name: 缓存 upx
+        if: matrix.os != 'darwin'
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/upx
+          key: upx-5.0.2-amd64-linux
       - name: UPX 压缩
         if: matrix.os != 'darwin'
         run: |
-          curl -sSL --retry 3 \
-            https://github.com/upx/upx/releases/download/v5.0.2/upx-5.0.2-amd64_linux.tar.xz \
-            | tar -xJ -C /tmp
-          sudo install -m 0755 /tmp/upx-5.0.2-amd64_linux/upx /usr/local/bin/upx
-          upx --version | head -n 1
+          if [ ! -x "$HOME/.cache/upx/upx" ]; then
+            mkdir -p "$HOME/.cache/upx"
+            curl -sSL --retry 3 \
+              https://github.com/upx/upx/releases/download/v5.0.2/upx-5.0.2-amd64_linux.tar.xz \
+              | tar -xJ -C /tmp
+            cp /tmp/upx-5.0.2-amd64_linux/upx "$HOME/.cache/upx/upx"
+          fi
+          "$HOME/.cache/upx/upx" --version | head -n 1
           echo "--- 压缩前 ---"
           ls -l dist/
-          upx --best --lzma dist/*
+          "$HOME/.cache/upx/upx" --best --lzma dist/*
           echo "--- 压缩后 ---"
           ls -l dist/
 
