@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="config-token" content="__SESSION_TOKEN__">
-  <title>SopsCos Dashboard · 配置管理</title>
+  <title>sops-fulla · 配置管理</title>
   <link rel="stylesheet" href="/style.css">
   <script src="/app.js" defer></script>
 </head>
@@ -14,7 +14,7 @@
   <aside class="sidebar">
     <a class="brand" href="/" aria-label="配置管理首页">
       <span class="brand-mark" aria-hidden="true">≋</span>
-      <span>SopsCos<small>配置工作台</small></span>
+      <span>Fulla<small>配置工作台</small></span>
     </a>
 
     <div class="workspace-label">
@@ -58,11 +58,6 @@
           <div class="eyebrow">SERVICE CONFIGURATION</div>
           <h1 id="service-title">服务配置</h1>
           <p>选择环境，修改配置其余交给工作台</p>
-        </div>
-        <div class="actions">
-          <span id="dirty-indicator" class="dirty-pill" hidden>● 未保存</span>
-          <button id="reload" class="button secondary" disabled>重新加载</button>
-          <button id="save" class="button primary" disabled>保存更改 <kbd>⌘S</kbd></button>
         </div>
       </section>
 
@@ -125,6 +120,25 @@
     </div>
   </main>
 
+  <!-- 右侧悬浮操作栏：保存 / 重载 / 设置 -->
+  <div id="action-rail" class="action-rail" role="toolbar" aria-label="快捷操作">
+    <button id="save" class="rail-button primary" disabled>
+      <span class="rail-icon" aria-hidden="true">✓</span>
+      <span class="rail-label">保存</span>
+      <span class="rail-hint">⌘S</span>
+      <span id="rail-dirty" class="rail-badge" hidden>●</span>
+    </button>
+    <button id="reload" class="rail-button" disabled>
+      <span class="rail-icon" aria-hidden="true">↻</span>
+      <span class="rail-label">重载</span>
+    </button>
+    <div class="rail-divider" aria-hidden="true"></div>
+    <button id="rail-settings" class="rail-button">
+      <span class="rail-icon" aria-hidden="true">⚙</span>
+      <span class="rail-label">设置</span>
+    </button>
+  </div>
+
   <!-- Toast 通知堆栈 -->
   <div id="toasts" aria-live="polite" role="status"></div>
 
@@ -140,22 +154,42 @@
     </div>
   </div>
 
-  <!-- age 私钥弹窗 -->
-  <div id="key-modal" class="modal-backdrop" hidden>
-    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="key-modal-title">
-      <h3 id="key-modal-title">age 私钥</h3>
-      <p class="modal-note">用于解密与核对密钥文件，<strong>仅本次会话有效</strong>：保存在进程内存里，不写文件、不进日志、关闭页面即失效留空提交则清除，回落到环境变量</p>
-      <label class="sr-only" for="key-input">age 私钥</label>
-      <textarea id="key-input" rows="4" spellcheck="false" autocomplete="off" placeholder="AGE-SECRET-KEY-1…（整行粘贴）"></textarea>
-      <div id="key-modal-status" class="modal-status"></div>
-      <div class="modal-actions">
-        <button id="key-modal-cancel" class="button secondary">取消</button>
-        <button id="key-modal-clear" class="button secondary">清除私钥</button>
-        <button id="key-modal-apply" class="button primary">应用</button>
+  <!-- 右侧设置抽屉：当前状态 / 页面私钥 / 密钥轮换 -->
+  <div id="drawer-backdrop" class="drawer-backdrop" hidden></div>
+  <aside id="settings-drawer" class="drawer" role="dialog" aria-modal="true" aria-labelledby="drawer-title" hidden>
+    <header class="drawer-header">
+      <div>
+        <h3 id="drawer-title">设置</h3>
+        <p class="drawer-subtitle">私钥、轮换与工作区信息</p>
       </div>
+      <button id="drawer-close" class="text-button" aria-label="关闭设置">✕</button>
+    </header>
+
+    <div class="drawer-body">
+      <section class="drawer-section">
+        <div class="small-label">当前状态</div>
+        <dl class="info-list">
+          <div><dt>仓库</dt><dd id="info-repository">—</dd></div>
+          <div><dt>私钥</dt><dd id="info-key">—</dd></div>
+          <div><dt>来源</dt><dd id="info-key-source">—</dd></div>
+        </dl>
+      </section>
+
+      <section class="drawer-section">
+        <div class="small-label">页面私钥</div>
+        <p class="modal-note">用于解密与核对密钥文件，<strong>仅本次会话有效</strong>：保存在进程内存里，不写文件、不进日志、关闭页面即失效。留空应用则清除，回落到环境变量。</p>
+        <label class="sr-only" for="key-input">age 私钥</label>
+        <textarea id="key-input" rows="4" spellcheck="false" autocomplete="off" placeholder="AGE-SECRET-KEY-1…（整行粘贴）"></textarea>
+        <div id="key-status" class="drawer-status"></div>
+        <div class="modal-actions">
+          <button id="key-modal-clear" class="button secondary">清除私钥</button>
+          <button id="key-modal-apply" class="button primary">应用</button>
+        </div>
+      </section>
+
       <details id="rotate-section" class="rotate-section">
         <summary>轮换到新密钥</summary>
-        <p class="modal-note">换一套全新的公私钥：全部密文只重写 age 段（<strong>值密文不变，git diff 最小</strong>），.sops.yaml 的公钥一并更新执行前需要当前私钥已就绪</p>
+        <p class="modal-note">换一套全新的公私钥：全部密文只重写 age 段（<strong>值密文不变，git diff 最小</strong>），.sops.yaml 的公钥一并更新。执行前需要当前私钥已就绪。</p>
         <div class="rotate-toolbar">
           <button id="rotate-generate" class="button secondary" type="button">生成新密钥对</button>
         </div>
@@ -168,9 +202,9 @@
         <div class="modal-actions">
           <button id="rotate-run" class="button primary" type="button">执行轮换</button>
         </div>
-        <div id="rotate-status" class="modal-status"></div>
+        <div id="rotate-status" class="drawer-status"></div>
       </details>
     </div>
-  </div>
+  </aside>
 </body>
 </html>

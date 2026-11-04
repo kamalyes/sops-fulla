@@ -52,6 +52,6 @@ SOPS_AGE_KEY_FILE=examples/basic/demo-key.txt \
 # 空目录里一条命令初始化：生成 age 密钥对 + 写 .sops.yaml + 可选示例结构
 sops-fulla --repo /path/to/your-repo init --example
 
-# 需要换钥匙时（页面左下角 → 私钥弹窗 → 轮换到新密钥）：
+# 需要换钥匙时（左下角状态条或右侧「设置」→ 轮换到新密钥）：
 # 全部密文只重写 age 段，值密文与 git diff 最小，.sops.yaml 一并更新
 ```

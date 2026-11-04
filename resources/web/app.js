@@ -71,19 +71,27 @@ function renderKeyStatus() {
   $("key-status-text").textContent = ready
     ? "私钥就绪 · " + keySourceLabel(source)
     : "私钥未配置 · 点击设置";
+  // 设置抽屉里的「当前状态」信息一并刷新
+  $("info-repository").textContent = state.catalog?.repository || "—";
+  $("info-key").textContent = ready ? "已就绪，可查看与保存密文" : "未配置，密文仅显示占位";
+  $("info-key-source").textContent = keySourceLabel(source) || "—";
 }
 
-function openKeyModal() {
+function openSettings() {
   $("key-input").value = "";
   const ready = state.catalog?.secrets_ready;
-  $("key-modal-status").textContent = ready
-    ? "当前已使用" + keySourceLabel(state.catalog.key_source) + "粘贴新的私钥并应用可替换；留空应用或点「清除私钥」则回落到环境变量"
-    : "尚未配置可用的私钥：查看与保存密钥前需要先填写也可以改用环境变量 SOPS_AGE_KEY / SOPS_AGE_KEY_FILE";
-  $("key-modal").hidden = false;
+  $("key-status").textContent = ready
+    ? "当前已使用" + keySourceLabel(state.catalog.key_source) + "。粘贴新的私钥并应用可替换；留空应用或点「清除私钥」则回落到环境变量"
+    : "尚未配置可用的私钥：查看与保存密钥前需要先填写。也可以改用环境变量 SOPS_AGE_KEY / SOPS_AGE_KEY_FILE";
+  $("drawer-backdrop").hidden = false;
+  $("settings-drawer").hidden = false;
   $("key-input").focus();
 }
 
-function closeKeyModal() { $("key-modal").hidden = true; }
+function closeSettings() {
+  $("settings-drawer").hidden = true;
+  $("drawer-backdrop").hidden = true;
+}
 
 async function applyPageKey(secret, { clear = false } = {}) {
   const result = await api("/api/key", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ secret }) });
@@ -95,18 +103,19 @@ async function applyPageKey(secret, { clear = false } = {}) {
   if (state.filename) await loadFile();
 }
 
-$("open-key-modal").onclick = openKeyModal;
-$("key-modal-cancel").onclick = closeKeyModal;
+$("open-key-modal").onclick = openSettings;
+$("rail-settings").onclick = openSettings;
+$("drawer-close").onclick = closeSettings;
+$("drawer-backdrop").onclick = closeSettings;
 $("key-modal-clear").onclick = async () => {
-  try { await applyPageKey("", { clear: true }); closeKeyModal(); }
+  try { await applyPageKey("", { clear: true }); closeSettings(); }
   catch (error) { toast(error.message, "error"); }
 };
 $("key-modal-apply").onclick = async () => {
   const secret = $("key-input").value.trim();
-  try { await applyPageKey(secret); if (secret) closeKeyModal(); }
-  catch (error) { $("key-modal-status").textContent = error.message; }
+  try { await applyPageKey(secret); if (secret) closeSettings(); }
+  catch (error) { $("key-status").textContent = error.message; }
 };
-$("key-modal").onclick = (event) => { if (event.target === $("key-modal")) closeKeyModal(); };
 $("key-input").onkeydown = (event) => {
   if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) { event.preventDefault(); $("key-modal-apply").click(); }
 };
@@ -153,7 +162,7 @@ $("rotate-run").onclick = async () => {
 
 function controls() {
   const unavailable = state.file?.kind === "secrets" && !state.catalog.secrets_ready;
-  $("dirty-indicator").hidden = !state.dirty;
+  $("rail-dirty").hidden = !state.dirty;
   $("save").disabled = state.busy || unavailable || !state.file || !state.dirty;
   $("reload").disabled = state.busy || !state.filename;
   $("save-status").textContent = state.busy ? "正在处理…" : state.dirty ? "有未保存的更改" : "所有更改已保存";
@@ -347,7 +356,7 @@ async function loadFile() {
     if (isSecret) {
       state.rows = Object.entries(state.file.values).map(([key, value]) => ({ id: ++rowId, key, value, revealed: false }));
       $("key-search").value = ""; renderRows();
-      if (!state.catalog.secrets_ready) toast("查看与保存密钥需要 age 私钥 —— 在左下角点击设置", "info");
+      if (!state.catalog.secrets_ready) toast("查看与保存密钥需要 age 私钥 —— 点左下角状态条或右侧「设置」", "info");
     } else $("config-content").value = state.file.content;
   } catch (error) {
     state.file = null;
@@ -419,7 +428,7 @@ window.addEventListener("keydown", (event) => {
   if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "s") { event.preventDefault(); save(); }
   if (event.key === "Escape") {
     if (!$("confirm-modal").hidden) settleConfirm(false);
-    if (!$("key-modal").hidden) closeKeyModal();
+    if (!$("settings-drawer").hidden) closeSettings();
   }
 });
 

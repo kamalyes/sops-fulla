@@ -120,7 +120,8 @@ ciphertext and MAC stay untouched — the sops CLI never notices.
 Viewing and saving secrets (decryption) requires the identity, one of
 three options, highest priority first:
 
-1. **Paste it into the key status popover at the bottom-left of the page**
+1. **Open Settings via the key status bar at the bottom-left (or the
+   floating "Settings" button on the right) and paste it into the drawer**
    (`AGE-SECRET-KEY-1…`) — valid for this session only, kept in process
    memory, never written to disk or logs
 2. Environment variables `SOPS_AGE_KEY` / `SOPS_AGE_KEY_FILE`
@@ -132,9 +133,9 @@ the identity can still edit plain configs.
 
 ## 🔄 Key Rotation (Dashboard)
 
-When you suspect the identity has leaked, or as periodic hygiene, use the
-"Rotate to a new key" section inside the key popover at the bottom-left
-of the page:
+When you suspect the identity has leaked, or as periodic hygiene, open the
+settings drawer (bottom-left status bar or the floating "Settings" button
+on the right) and use the "Rotate to a new key" section:
 
 1. Click "Generate new key pair" to get a fresh age recipient/identity
    pair (the identity only appears in the browser response and is never
@@ -208,7 +209,7 @@ sequenceDiagram
     participant V as ⚙️ service
     participant D as 💾 Repo on disk
 
-    U->>P: key popover → "Rotate to a new key"
+    U->>P: settings drawer → "Rotate to a new key"
     P->>S: POST /api/keypair
     S-->>P: fresh age key pair (never stored server-side)
     U->>P: confirm rotation
