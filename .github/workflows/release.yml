@@ -110,6 +110,22 @@ jobs:
             -o "${output}" .
           echo "version=${version}" >> "$GITHUB_ENV"
 
+      # UPX 压缩：sops 官方库带了不少依赖，Go 二进制默认偏大，
+      # 压缩后通常缩小 60% 以上官方静态版支持全部五个目标平台
+      # （darwin / linux 的 amd64+arm64、windows amd64）
+      - name: UPX 压缩
+        run: |
+          curl -sSL --retry 3 \
+            https://github.com/upx/upx/releases/download/v5.0.2/upx-5.0.2-amd64_linux.tar.xz \
+            | tar -xJ -C /tmp
+          sudo install -m 0755 /tmp/upx-5.0.2-amd64_linux/upx /usr/local/bin/upx
+          upx --version | head -n 1
+          echo "--- 压缩前 ---"
+          ls -l dist/
+          upx --best --lzma dist/*
+          echo "--- 压缩后 ---"
+          ls -l dist/
+
       - uses: actions/upload-artifact@v4
         with:
           name: sops-fulla-${{ matrix.os }}-${{ matrix.arch }}
@@ -169,7 +185,8 @@ jobs:
 
             ## 使用
 
-            单二进制，**不需要安装 sops / age / Python**：
+            单二进制，**不需要安装 sops / age / Python**；
+            产物已用 UPX 压缩（运行时自解压）：
 
             ```bash
             chmod +x sops-fulla-darwin-arm64   # 按平台选择
