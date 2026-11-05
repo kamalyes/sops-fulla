@@ -25,6 +25,7 @@ const (
 	BizErrCodePayloadTooLarge     = "error.payload_too_large"
 	BizErrCodeJSONOnly            = "error.json_only"
 	BizErrCodeForbidden           = "error.forbidden"
+	BizErrCodeUnauthorized        = "error.unauthorized"
 	BizErrCodeNotFound            = "error.not_found"
 	BizErrCodeNoWorkspace         = "error.no_workspace"
 	BizErrCodeWorkspaceInvalid    = "error.workspace_invalid"

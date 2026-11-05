@@ -48,4 +48,20 @@ const (
 	WorkspacesFileName = "workspaces.json"
 	// MaxRecentWorkspaces 最近工作区列表的保留上限
 	MaxRecentWorkspaces = 8
+	// AppearanceFileName 页面个性化设置（主题色/字体/字号）文件名
+	AppearanceFileName = "appearance.json"
 )
+
+// 个性化设置的可选值白名单：与页面下拉/色板一一对应
+const (
+	AccentPattern = "^#[0-9a-fA-F]{6}$"
+)
+
+// AppearanceSansFonts 界面字体可选值
+var AppearanceSansFonts = []string{"default", "rounded", "serif", "kai"}
+
+// AppearanceMonoFonts 编辑器字体可选值
+var AppearanceMonoFonts = []string{"default", "consolas", "sarasa", "serif"}
+
+// AppearanceZoomLevels 字号档位可选值
+var AppearanceZoomLevels = []string{"compact", "standard", "relaxed"}

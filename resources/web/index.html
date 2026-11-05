@@ -134,8 +134,55 @@
     </div>
   </main>
 
-  <!-- 右侧悬浮操作栏：保存 / 重载 / 设置 -->
+  <!-- 个性化快速面板：悬浮栏「个性化」按钮弹出（主题色 / 字体 / 字号） -->
+  <div id="appearance-popover" class="appearance-popover" role="dialog" aria-label="个性化设置" hidden>
+    <div class="small-label">个性化</div>
+    <div class="appearance-row">
+      <span>主题色</span>
+      <div class="accent-swatches" id="accent-swatches"></div>
+    </div>
+    <div class="appearance-row">
+      <span></span>
+      <label class="accent-custom"><input type="color" id="accent-custom" value="#3564e8">自定义颜色</label>
+    </div>
+    <div class="appearance-row">
+      <span>界面字体</span>
+      <label class="sr-only" for="sans-select">界面字体</label>
+      <select id="sans-select">
+        <option value="default">系统默认</option>
+        <option value="rounded">圆润（雅黑 / 苹方）</option>
+        <option value="serif">衬线（宋体 / Georgia）</option>
+        <option value="kai">楷体</option>
+      </select>
+    </div>
+    <div class="appearance-row">
+      <span>编辑器字体</span>
+      <label class="sr-only" for="mono-select">编辑器字体</label>
+      <select id="mono-select">
+        <option value="default">系统等宽</option>
+        <option value="consolas">Consolas</option>
+        <option value="sarasa">更纱黑体（Sarasa Mono）</option>
+        <option value="serif">衬线（宋体 / Georgia）</option>
+      </select>
+    </div>
+    <div class="appearance-row">
+      <span>字号</span>
+      <label class="sr-only" for="zoom-select">字号</label>
+      <select id="zoom-select">
+        <option value="compact">紧凑</option>
+        <option value="standard">标准</option>
+        <option value="relaxed">宽松</option>
+      </select>
+    </div>
+    <p class="theme-note">偏好保存在本机（跟工具走），换浏览器也生效</p>
+  </div>
+
+  <!-- 右侧悬浮操作栏：个性化 / 保存 / 重载 / 设置 -->
   <div id="action-rail" class="action-rail" role="toolbar" aria-label="快捷操作">
+    <button id="rail-appearance" class="rail-button" aria-haspopup="dialog">
+      <span class="rail-icon" aria-hidden="true">◑</span>
+      <span class="rail-label">个性化</span>
+    </button>
     <button id="save" class="rail-button primary" disabled>
       <span class="rail-icon" aria-hidden="true">✓</span>
       <span class="rail-label">保存</span>

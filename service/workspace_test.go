@@ -164,3 +164,31 @@ func TestRememberKeyRoundTrip(t *testing.T) {
 		t.Fatal("清除后的新实例不应再加载记住的私钥")
 	}
 }
+
+// TestAppearancePersistence 验证个性化设置写入本机配置目录并在下次读取时还原
+func TestAppearancePersistence(t *testing.T) {
+	isolateConfig(t)
+
+	stored := service.Appearance{Accent: "#7c5cd6", Sans: "kai", Mono: "consolas", Zoom: "relaxed"}
+	if err := service.SaveAppearance(stored); err != nil {
+		t.Fatal(err)
+	}
+	loaded := service.LoadAppearance()
+	if loaded != stored {
+		t.Fatalf("持久化后应原样读回，实际 %+v", loaded)
+	}
+
+	// 非法取值被归零成默认：主题色必须是 #RRGGBB，字体/字号必须在白名单里
+	if err := service.SaveAppearance(service.Appearance{Accent: "red", Sans: "comic-sans", Mono: "hacker", Zoom: "huge"}); err == nil {
+		t.Fatal("全非法取值应报错")
+	}
+	if loaded := service.LoadAppearance(); loaded != stored {
+		t.Fatalf("被拒绝的保存不应改动已存内容，实际 %+v", loaded)
+	}
+
+	// 无文件时返回默认值
+	isolateConfig(t)
+	if loaded := service.LoadAppearance(); loaded.Sans != "default" || loaded.Zoom != "standard" {
+		t.Fatalf("无文件时应返回默认值，实际 %+v", loaded)
+	}
+}

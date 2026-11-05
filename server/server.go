@@ -125,9 +125,10 @@ func (s *Server) route(w http.ResponseWriter, r *http.Request) error {
 	if origin := r.Header.Get("Origin"); origin != "" && origin != "http://"+host {
 		return errors.New(403, errors.BizErrCodeForbidden, "不允许从其他页面访问本机配置")
 	}
+	// 会话令牌失效返回 401：页面据此自动刷新拿新令牌（服务重启过就会遇到）
 	if strings.HasPrefix(r.URL.Path, "/api/") &&
 		subtle.ConstantTimeCompare([]byte(r.Header.Get("X-Config-Token")), []byte(s.token)) != 1 {
-		return errors.New(403, errors.BizErrCodeForbidden, "页面会话已失效，请刷新后重试")
+		return errors.New(401, errors.BizErrCodeUnauthorized, "页面会话已失效，请刷新后重试")
 	}
 	query := r.URL.Query()
 	switch {
@@ -141,6 +142,10 @@ func (s *Server) route(w http.ResponseWriter, r *http.Request) error {
 		return sendJSON(w, http.StatusOK, data)
 	case r.Method == http.MethodGet && r.URL.Path == "/api/workspaces":
 		return sendJSON(w, http.StatusOK, s.svc.WorkspacesInfo())
+	case r.Method == http.MethodGet && r.URL.Path == "/api/appearance":
+		return sendJSON(w, http.StatusOK, service.LoadAppearance())
+	case r.Method == http.MethodPost && r.URL.Path == "/api/appearance":
+		return s.handleAppearance(w, r)
 	case r.Method == http.MethodPost && r.URL.Path == "/api/workspace":
 		return s.handleWorkspace(w, r)
 	case r.Method == http.MethodPost && r.URL.Path == "/api/key":
@@ -174,6 +179,22 @@ func (s *Server) handleWorkspace(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 	return sendJSON(w, http.StatusOK, s.svc.Catalog())
+}
+
+// handleAppearance 保存页面个性化设置（主题色/字体/字号）到本机配置目录
+func (s *Server) handleAppearance(w http.ResponseWriter, r *http.Request) error {
+	body, err := readJSONBody(r)
+	if err != nil {
+		return err
+	}
+	var appearance service.Appearance
+	if err := json.Unmarshal(body, &appearance); err != nil {
+		return errors.New(400, errors.BizErrCodeInvalidRequest, "请求格式无效")
+	}
+	if err := service.SaveAppearance(appearance); err != nil {
+		return err
+	}
+	return sendJSON(w, http.StatusOK, service.LoadAppearance())
 }
 
 func (s *Server) handleKey(w http.ResponseWriter, r *http.Request) error {

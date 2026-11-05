@@ -20,8 +20,10 @@ import (
 	"github.com/kamalyes/sops-fulla/errors"
 )
 
-// nameRe 限制路径各段允许的字符，天然拒绝 `..` 与分隔符
-var nameRe = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_.-]*$`)
+// nameRe 限制路径各段允许的字符：Unicode 字母/数字（含中文）开头，
+// 只含字母、数字、下划线、点、短横线；天然拒绝 `..`、分隔符、空格
+// 与 Windows 非法字符（<>:"|?*）
+var nameRe = regexp.MustCompile(`^[\p{L}\p{N}][\p{L}\p{N}_.-]*$`)
 
 // validName 校验单段名称：字母或数字开头，只含字母、数字、下划线、点、短横线
 func validName(value string) bool {

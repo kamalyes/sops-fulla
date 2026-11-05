@@ -16,6 +16,8 @@ function element(tag, className, text) {
 
 async function api(path, options = {}) {
   const response = await fetch(path, { ...options, cache: "no-store", headers: { "X-Config-Token": token, ...(options.headers || {}) } });
+  // 会话令牌失效（服务重启过）：刷新页面拿新令牌，避免点击毫无反应
+  if (response.status === 401 && path !== "/") { location.reload(); throw new Error("页面会话已过期，正在重新加载"); }
   const data = await response.json();
   if (!response.ok) throw new Error(data.error || "操作未完成，请重试");
   return data;
@@ -219,6 +221,118 @@ $("drawer-workspace-switch").onclick = () => switchWorkspace($("drawer-workspace
 $("drawer-workspace-path").onkeydown = (event) => {
   if (event.key === "Enter") { event.preventDefault(); $("drawer-workspace-switch").click(); }
 };
+
+/* ---------- 个性化：主题色与字体（保存在本机浏览器） ---------- */
+
+const APPEARANCE_KEY = "fulla-appearance";
+const ACCENT_PRESETS = [
+  ["#3564e8", "靛蓝"], ["#0e9384", "青绿"], ["#7c5cd6", "紫"],
+  ["#d63384", "玫红"], ["#d98207", "琥珀"], ["#52606d", "石墨"],
+];
+const SANS_STACKS = {
+  default: "",
+  rounded: '"PingFang SC", "Microsoft YaHei", "Segoe UI", system-ui, sans-serif',
+  serif: 'Georgia, "Times New Roman", "Songti SC", "SimSun", serif',
+  kai: '"Kaiti SC", "KaiTi", "STKaiti", serif',
+};
+const MONO_STACKS = {
+  default: "",
+  consolas: 'Consolas, "Courier New", monospace',
+  sarasa: '"Sarasa Mono SC", "Sarasa Term SC", "Noto Sans Mono CJK SC", monospace',
+  serif: 'Georgia, "Times New Roman", "Songti SC", "SimSun", serif',
+};
+const ZOOM_LEVELS = { compact: "0.92", standard: "1", relaxed: "1.1" };
+
+function loadAppearance() {
+  try { return { accent: "", sans: "default", mono: "default", zoom: "standard", ...JSON.parse(localStorage.getItem(APPEARANCE_KEY) || "{}") }; }
+  catch { return { accent: "", sans: "default", mono: "default", zoom: "standard" }; }
+}
+
+function saveAppearance(appearance) {
+  try { localStorage.setItem(APPEARANCE_KEY, JSON.stringify(appearance)); } catch { /* 隐私模式下保存失败，不影响本次会话 */ }
+}
+
+/* 持久化：本机浏览器留一份备份，同时写入工具的本机配置目录（换浏览器也生效） */
+function persistAppearance(appearance) {
+  saveAppearance(appearance);
+  api("/api/appearance", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(appearance) }).catch(() => { /* 服务端存不进也不影响当前页面 */ });
+}
+
+function applyAppearance(appearance) {
+  const root = document.documentElement.style;
+  if (appearance.accent) {
+    root.setProperty("--blue", appearance.accent);
+    root.setProperty("--blue-rgb", hexToRgb(appearance.accent));
+  } else {
+    root.removeProperty("--blue");
+    root.removeProperty("--blue-rgb");
+  }
+  root.setProperty("--ui-zoom", ZOOM_LEVELS[appearance.zoom] || "1");
+  SANS_STACKS[appearance.sans] ? root.setProperty("--sans", SANS_STACKS[appearance.sans]) : root.removeProperty("--sans");
+  MONO_STACKS[appearance.mono] ? root.setProperty("--mono", MONO_STACKS[appearance.mono]) : root.removeProperty("--mono");
+}
+
+function hexToRgb(hex) {
+  const value = hex.replace("#", "");
+  const full = value.length === 3 ? value.split("").map((c) => c + c).join("") : value;
+  const num = parseInt(full, 16);
+  return `${(num >> 16) & 255}, ${(num >> 8) & 255}, ${num & 255}`;
+}
+
+function syncAppearanceControls(appearance) {
+  document.querySelectorAll("#accent-swatches .swatch").forEach((swatch) => {
+    swatch.classList.toggle("active", swatch.dataset.accent === appearance.accent);
+  });
+  if (!ACCENT_PRESETS.some(([hex]) => hex === appearance.accent)) $("accent-custom").value = appearance.accent || "#3564e8";
+  $("sans-select").value = appearance.sans;
+  $("mono-select").value = appearance.mono;
+  $("zoom-select").value = appearance.zoom;
+}
+
+/* 个性化面板：悬浮栏「个性化」按钮开关，点外面或 Esc 关闭 */
+function setAppearancePopover(show) { $("appearance-popover").hidden = !show; }
+
+$("rail-appearance").onclick = () => setAppearancePopover($("appearance-popover").hidden);
+document.addEventListener("click", (event) => {
+  if ($("appearance-popover").hidden) return;
+  if ($("appearance-popover").contains(event.target) || $("rail-appearance").contains(event.target)) return;
+  setAppearancePopover(false);
+});
+
+function initAppearance() {
+  const host = $("accent-swatches");
+  for (const [hex, label] of ACCENT_PRESETS) {
+    const swatch = element("button", "swatch");
+    swatch.type = "button";
+    swatch.title = label;
+    swatch.dataset.accent = hex;
+    swatch.style.background = hex;
+    swatch.onclick = () => {
+      const appearance = loadAppearance();
+      appearance.accent = hex;
+      persistAppearance(appearance); applyAppearance(appearance); syncAppearanceControls(appearance);
+    };
+    host.append(swatch);
+  }
+  $("accent-custom").oninput = (event) => {
+    const appearance = loadAppearance();
+    appearance.accent = event.target.value;
+    persistAppearance(appearance); applyAppearance(appearance); syncAppearanceControls(appearance);
+  };
+  for (const [select, key] of [["sans-select", "sans"], ["mono-select", "mono"], ["zoom-select", "zoom"]]) {
+    $(select).onchange = (event) => {
+      const appearance = loadAppearance();
+      appearance[key] = event.target.value;
+      persistAppearance(appearance); applyAppearance(appearance);
+    };
+  }
+  // 服务端存的一份优先（跟工具走）；拿不到时回落到本机浏览器备份
+  api("/api/appearance")
+    .then((server) => { applyAppearance(server); syncAppearanceControls(server); })
+    .catch(() => { const appearance = loadAppearance(); applyAppearance(appearance); syncAppearanceControls(appearance); });
+}
+
+initAppearance();
 
 /* ---------- 密钥轮换 ---------- */
 
@@ -528,6 +642,7 @@ window.addEventListener("keydown", (event) => {
   if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "s") { event.preventDefault(); save(); }
   if (event.key === "Escape") {
     if (!$("confirm-modal").hidden) settleConfirm(false);
+    if (!$("appearance-popover").hidden) setAppearancePopover(false);
     if (!$("settings-drawer").hidden) closeSettings();
   }
 });

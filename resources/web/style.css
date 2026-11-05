@@ -10,9 +10,11 @@
   --muted: #8a94a6;
   --line: #eef1f6;
   --line-strong: #dce2ec;
+  /* 主题色：--blue 由「个性化」设置覆盖，派生色跟随计算 */
   --blue: #3564e8;
-  --blue-ink: #274eb5;
-  --soft-blue: #eef3ff;
+  --blue-rgb: 53, 100, 232;
+  --blue-ink: color-mix(in srgb, var(--blue) 78%, #0f1b3d);
+  --soft-blue: color-mix(in srgb, var(--blue) 10%, #fff);
   --green: #20987d;
   --soft-green: #e7f6f1;
   --red: #d84b57;
@@ -32,6 +34,8 @@
 html, body { height: 100%; }
 body {
   margin: 0;
+  /* 字号档位（紧凑/标准/宽松）由「个性化」设置覆盖 */
+  zoom: var(--ui-zoom, 1);
   font: 14px/1.6 var(--sans);
   color: var(--ink);
   background: var(--bg);
@@ -71,8 +75,8 @@ input, textarea { font: inherit; color: inherit; }
 .brand-mark {
   width: 34px; height: 34px; flex: none; display: grid; place-items: center;
   border-radius: 10px; font-size: 18px; color: #fff;
-  background: linear-gradient(135deg, var(--blue), #7a9bf5);
-  box-shadow: 0 4px 12px -4px rgba(53, 100, 232, 0.55);
+  background: linear-gradient(135deg, var(--blue), color-mix(in srgb, var(--blue) 55%, #fff));
+  box-shadow: 0 4px 12px -4px rgba(var(--blue-rgb), 0.55);
 }
 .brand small { display: block; font-size: 11px; font-weight: 400; color: var(--muted); }
 .brand > span:last-child { line-height: 1.25; }
@@ -195,7 +199,7 @@ main { flex: 1; display: flex; flex-direction: column; overflow: hidden; min-wid
 .rail-hint { font: 10px var(--mono); color: var(--muted); }
 .rail-button.primary {
   background: var(--blue); border-color: var(--blue); color: #fff;
-  box-shadow: 0 4px 14px -6px rgba(53, 100, 232, 0.6);
+  box-shadow: 0 4px 14px -6px rgba(var(--blue-rgb), 0.6);
 }
 .rail-button.primary:hover:not(:disabled) { background: var(--blue-ink); color: #fff; }
 .rail-button.primary .rail-hint { color: rgba(255, 255, 255, 0.78); }
@@ -332,7 +336,7 @@ main { flex: 1; display: flex; flex-direction: column; overflow: hidden; min-wid
 }
 .key-input:focus, .value-wrap textarea:focus, #config-content:focus, #key-input:focus {
   outline: none; border-color: var(--blue);
-  box-shadow: 0 0 0 3px rgba(53, 100, 232, 0.12);
+  box-shadow: 0 0 0 3px rgba(var(--blue-rgb), 0.12);
 }
 .key-caption {
   display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--muted);
@@ -546,7 +550,7 @@ main { flex: 1; display: flex; flex-direction: column; overflow: hidden; min-wid
 }
 .guide-input-row input:focus {
   outline: none; border-color: var(--blue); background: var(--card);
-  box-shadow: 0 0 0 3px rgba(53, 100, 232, 0.12);
+  box-shadow: 0 0 0 3px rgba(var(--blue-rgb), 0.12);
 }
 .guide-input-row .button { flex: none; }
 .guide-hint { font-size: 12px; color: var(--muted); margin: 4px 0 0; }
@@ -573,3 +577,45 @@ main { flex: 1; display: flex; flex-direction: column; overflow: hidden; min-wid
 }
 .remember-check input { accent-color: var(--blue); width: 14px; height: 14px; margin: 0; }
 #key-forget { margin-right: auto; align-self: center; }
+
+/* ---------------- 个性化：主题色与字体 ---------------- */
+
+/* 个性化快速面板：贴着悬浮栏左侧弹出 */
+.appearance-popover {
+  position: fixed; right: 92px; top: 50%; transform: translateY(-50%); z-index: 45;
+  width: 264px; background: var(--card); border: 1px solid var(--line);
+  border-radius: var(--radius-lg); box-shadow: var(--shadow-lg);
+  padding: 14px 16px; display: flex; flex-direction: column; gap: 6px;
+  animation: modal-in 0.16s ease-out;
+}
+.theme-note { margin: 0; font-size: 11px; color: var(--muted); }
+
+.appearance-row {
+  display: grid; grid-template-columns: 68px 1fr; align-items: center;
+  gap: 10px; margin-top: 8px;
+}
+.appearance-row > span { font-size: 12px; color: var(--muted); }
+.appearance-row select {
+  width: 100%; border: 1px solid var(--line-strong); border-radius: var(--radius);
+  padding: 6px 8px; font: 12px var(--sans); background: var(--card); color: var(--ink);
+}
+.appearance-row select:focus { outline: none; border-color: var(--blue); }
+
+.accent-swatches { display: flex; flex-wrap: wrap; align-items: center; gap: 7px; }
+.swatch {
+  width: 22px; height: 22px; border-radius: 50%; border: 2px solid #fff;
+  box-shadow: 0 0 0 1px var(--line-strong); cursor: pointer; padding: 0;
+  transition: transform 0.12s, box-shadow 0.12s;
+}
+.swatch:hover { transform: scale(1.12); }
+.swatch.active { box-shadow: 0 0 0 2px var(--blue), 0 0 0 4px color-mix(in srgb, var(--blue) 25%, #fff); }
+.accent-custom {
+  display: inline-flex; align-items: center; gap: 5px; font-size: 12px; color: var(--muted);
+  cursor: pointer;
+}
+.accent-custom input {
+  width: 22px; height: 22px; padding: 0; border: none; border-radius: 50%;
+  background: none; cursor: pointer;
+}
+.accent-custom input::-webkit-color-swatch-wrapper { padding: 0; }
+.accent-custom input::-webkit-color-swatch { border: 1px solid var(--line-strong); border-radius: 50%; }

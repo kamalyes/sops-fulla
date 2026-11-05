@@ -107,11 +107,11 @@ func TestIndexInjectsSessionToken(t *testing.T) {
 
 func TestAPITokenEnforced(t *testing.T) {
 	srv, base := newTestServer(t)
-	if status, _ := request(t, http.MethodGet, base+"/api/catalog", "", "", nil); status != http.StatusForbidden {
-		t.Fatalf("缺令牌应 403，实际 %d", status)
+	if status, _ := request(t, http.MethodGet, base+"/api/catalog", "", "", nil); status != http.StatusUnauthorized {
+		t.Fatalf("缺令牌应 401，实际 %d", status)
 	}
-	if status, _ := request(t, http.MethodGet, base+"/api/catalog", "wrong-token", "", nil); status != http.StatusForbidden {
-		t.Fatalf("错令牌应 403，实际 %d", status)
+	if status, _ := request(t, http.MethodGet, base+"/api/catalog", "wrong-token", "", nil); status != http.StatusUnauthorized {
+		t.Fatalf("错令牌应 401，实际 %d", status)
 	}
 	if status, body := request(t, http.MethodGet, base+"/api/catalog", srv.Token(), "", nil); status != http.StatusOK {
 		t.Fatalf("带令牌应 200，实际 %d：%s", status, body)
