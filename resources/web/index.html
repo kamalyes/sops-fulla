@@ -69,7 +69,7 @@
         <div class="guide-input-row">
           <label class="sr-only" for="workspace-path">配置仓库路径</label>
           <input id="workspace-path" type="text" spellcheck="false" autocomplete="off" placeholder="例如 E:\WorkSpaces\my-configs 或 /srv/configs">
-          <button id="workspace-open" class="button primary">打开工作区</button>
+          <button id="workspace-open" class="button primary">浏览并打开</button>
         </div>
         <div id="guide-recents" class="recent-list"></div>
         <p class="guide-hint">还没有仓库？在终端里运行 <code>sops-fulla --repo &lt;路径&gt; init</code> 可以从零创建</p>
@@ -235,7 +235,7 @@
         <div class="guide-input-row">
           <label class="sr-only" for="drawer-workspace-path">新的配置仓库路径</label>
           <input id="drawer-workspace-path" type="text" spellcheck="false" autocomplete="off" placeholder="输入新的仓库路径，回车切换">
-          <button id="drawer-workspace-switch" class="button secondary">切换</button>
+          <button id="drawer-workspace-switch" class="button secondary">浏览并切换</button>
         </div>
         <div id="drawer-workspace-recents" class="recent-list"></div>
       </section>
@@ -274,9 +274,15 @@
           <input id="rotate-recipient" spellcheck="false" autocomplete="off" placeholder="age1…">
           <label for="rotate-identity">新私钥（请立即保存，离开页面后不再显示）</label>
           <textarea id="rotate-identity" rows="3" readonly spellcheck="false"></textarea>
+          <div class="rotate-downloads">
+            <p class="modal-note">生成时已自动下载公钥、私钥两个文本文件；若没有收到下载，点下面的按钮重新保存。确认保存妥当后才能执行轮换。</p>
+            <div class="modal-actions">
+              <button id="rotate-save-pair" class="button secondary" type="button">保存公私钥文件</button>
+            </div>
+          </div>
         </div>
         <div class="modal-actions">
-          <button id="rotate-run" class="button primary" type="button">执行轮换</button>
+          <button id="rotate-run" class="button primary" type="button" disabled>执行轮换</button>
         </div>
         <div id="rotate-status" class="drawer-status"></div>
       </details>

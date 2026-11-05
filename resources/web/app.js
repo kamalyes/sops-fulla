@@ -19,7 +19,11 @@ async function api(path, options = {}) {
   // 会话令牌失效（服务重启过）：刷新页面拿新令牌，避免点击毫无反应
   if (response.status === 401 && path !== "/") { location.reload(); throw new Error("页面会话已过期，正在重新加载"); }
   const data = await response.json();
-  if (!response.ok) throw new Error(data.error || "操作未完成，请重试");
+  if (!response.ok) {
+    const failure = new Error(data.error || "操作未完成，请重试");
+    failure.status = response.status; // 供调用方区分「不支持」等特殊情况
+    throw failure;
+  }
   return data;
 }
 
@@ -213,13 +217,46 @@ async function switchWorkspace(path) {
   finally { state.busy = false; controls(); }
 }
 
-$("workspace-open").onclick = () => switchWorkspace($("workspace-path").value);
+/* ---------- 打开工作区：点按钮弹出系统选择窗口，选好即切换 ---------- */
+
+// 环境不支持弹窗时回落为按输入框里的路径切换
+let browseSupported = true;
+
+function fallbackOpenButtons() {
+  $("workspace-open").textContent = "打开工作区";
+  $("drawer-workspace-switch").textContent = "切换";
+}
+
+async function openWorkspace(input) {
+  const typed = input.value.trim();
+  if (!browseSupported) { switchWorkspace(typed); return; }
+  state.busy = true; controls();
+  let pick;
+  try {
+    pick = await api("/api/browse", { method: "POST" });
+  } catch (error) {
+    state.busy = false; controls();
+    if (error.status === 501) {
+      browseSupported = false;
+      fallbackOpenButtons();
+      toast(error.message + "，已改为按输入的路径打开", "info");
+      if (typed) switchWorkspace(typed);
+    } else toast(error.message, "error");
+    return;
+  }
+  state.busy = false; controls();
+  if (!pick.path) { toast("已取消选择目录", "info"); return; }
+  input.value = pick.path;
+  switchWorkspace(pick.path);
+}
+
+$("workspace-open").onclick = () => openWorkspace($("workspace-path"));
 $("workspace-path").onkeydown = (event) => {
-  if (event.key === "Enter") { event.preventDefault(); $("workspace-open").click(); }
+  if (event.key === "Enter") { event.preventDefault(); openWorkspace($("workspace-path")); }
 };
-$("drawer-workspace-switch").onclick = () => switchWorkspace($("drawer-workspace-path").value);
+$("drawer-workspace-switch").onclick = () => openWorkspace($("drawer-workspace-path"));
 $("drawer-workspace-path").onkeydown = (event) => {
-  if (event.key === "Enter") { event.preventDefault(); $("drawer-workspace-switch").click(); }
+  if (event.key === "Enter") { event.preventDefault(); openWorkspace($("drawer-workspace-path")); }
 };
 
 /* ---------- 个性化：主题色与字体（保存在本机浏览器） ---------- */
@@ -336,20 +373,72 @@ initAppearance();
 
 /* ---------- 密钥轮换 ---------- */
 
+// 把文本内容存成文件下载到本地
+function downloadKeyFile(filename, content) {
+  const url = URL.createObjectURL(new Blob([content], { type: "text/plain;charset=utf-8" }));
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 4000);
+}
+
+// 轮换门槛：公私钥两份文件确认保存过才放行
+let rotateSavedPair = false;
+
+function updateRotateRun() {
+  $("rotate-run").disabled = !rotateSavedPair;
+}
+
+function downloadKeyPair() {
+  const recipient = $("rotate-recipient").value.trim();
+  const identity = $("rotate-identity").value.trim();
+  if (!recipient || !identity) return;
+  downloadKeyFile("fulla-age-public.txt", recipient + "\n");
+  downloadKeyFile("fulla-age-private.txt", identity + "\n");
+}
+
+function resetRotateDownloads() {
+  rotateSavedPair = false;
+  $("rotate-save-pair").classList.remove("saved");
+  $("rotate-save-pair").textContent = "保存公私钥文件";
+  updateRotateRun();
+}
+
 $("rotate-generate").onclick = async () => {
   try {
     const pair = await api("/api/keypair", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
     $("rotate-recipient").value = pair.recipient;
     $("rotate-identity").value = pair.identity;
     $("rotate-keypair").hidden = false;
-    $("rotate-status").textContent = "已生成新密钥对请先把新私钥保存到安全的地方（离开页面后不再显示），再执行轮换";
+    resetRotateDownloads();
+    // 生成后立即替用户把两份密钥文件下载下来，避免只看不动手导致私钥丢失
+    downloadKeyPair();
+    $("rotate-status").textContent = "已生成新密钥对，公钥、私钥两个文件已开始下载；确认保存妥当后即可执行轮换";
   } catch (error) { $("rotate-status").textContent = error.message; }
+};
+
+// 手动改动公钥后，之前下载的密钥文件就过期了，需要重新保存确认
+$("rotate-recipient").oninput = () => resetRotateDownloads();
+
+$("rotate-save-pair").onclick = () => {
+  const recipient = $("rotate-recipient").value.trim();
+  const identity = $("rotate-identity").value.trim();
+  if (!recipient || !identity) { $("rotate-status").textContent = "还没有可保存的密钥，请先生成新密钥对"; return; }
+  downloadKeyPair();
+  rotateSavedPair = true;
+  $("rotate-save-pair").classList.add("saved");
+  $("rotate-save-pair").textContent = "公私钥已保存 ✓";
+  updateRotateRun();
 };
 
 $("rotate-run").onclick = async () => {
   const recipient = $("rotate-recipient").value.trim();
   const identity = $("rotate-identity").value.trim();
   if (!recipient) { $("rotate-status").textContent = "请先生成新密钥对，或粘贴新的 age 公钥（age1 开头）"; return; }
+  if (!rotateSavedPair) { $("rotate-status").textContent = "请先确认公钥、私钥文件都已保存妥当，再执行轮换"; return; }
   const confirmed = await confirmDialog("轮换会把仓库里全部密文换到新公钥，并把 .sops.yaml 的公钥一并更新确定继续吗？", { title: "轮换密钥", acceptText: "执行轮换" });
   if (!confirmed) return;
   try {
@@ -365,11 +454,12 @@ $("rotate-run").onclick = async () => {
     }
     $("rotate-status").textContent = note;
     $("rotate-recipient").value = "";
+    $("rotate-keypair").hidden = true;
+    resetRotateDownloads();
     state.catalog = await api("/api/catalog");
     renderKeyStatus();
     if (state.filename) await loadFile();
-  } catch (error) { $("rotate-status").textContent = error.message; }
-  finally { $("rotate-run").disabled = false; }
+  } catch (error) { $("rotate-status").textContent = error.message; updateRotateRun(); }
 };
 
 /* ---------- 控件状态 ---------- */
@@ -394,7 +484,20 @@ function updateFileTabDirty() {
   });
 }
 
-function dirty() { state.dirty = true; controls(); }
+/* 内容快照：与最近一次保存/加载的内容比对得出真实脏状态。
+   完全空白的行（没填名称也没填值）不计入快照——新增后原样删掉不算改动 */
+function contentSnapshot() {
+  if (!state.file) return null;
+  if (state.file.kind === "secrets")
+    return JSON.stringify(state.rows.filter((row) => row.key.trim() || row.value.trim()).map((row) => [row.key, row.value]));
+  return $("config-content").value;
+}
+
+function dirty() {
+  const snapshot = contentSnapshot();
+  state.dirty = snapshot !== null && snapshot !== state.baseline;
+  controls();
+}
 
 async function canLeave() {
   if (!state.busy && !state.dirty) return true;
@@ -524,8 +627,11 @@ function renderRows() {
     const remove = element("button", "text-button danger delete-button", "×");
     remove.setAttribute("aria-label", "删除 " + (row.key || "新密钥"));
     remove.onclick = async () => {
-      const proceed = await confirmDialog("确定删除「" + (row.key || "这个新密钥") + "」吗？保存后生效", { title: "删除密钥", acceptText: "删除" });
-      if (!proceed) return;
+      // 空行（没填任何内容）直接移除，不打确认弹窗
+      if (row.key.trim() || row.value.trim()) {
+        const proceed = await confirmDialog("确定删除「" + (row.key || "这个新密钥") + "」吗？保存后生效", { title: "删除密钥", acceptText: "删除" });
+        if (!proceed) return;
+      }
       state.rows = state.rows.filter((item) => item.id !== row.id); dirty(); renderRows();
     };
     actions.append(reveal, remove);
@@ -550,7 +656,7 @@ function renderCopy(handler) {
 /* ---------- 文件加载与保存 ---------- */
 
 async function loadFile() {
-  state.busy = true; state.file = null; state.rows = []; state.dirty = false;
+  state.busy = true; state.file = null; state.rows = []; state.dirty = false; state.baseline = null;
   $("secret-editor").hidden = true; $("config-editor").hidden = true;
   $("editor-footer").hidden = true; $("item-count").hidden = true;
   $("empty").hidden = false; $("empty").querySelector("h3").textContent = "正在加载配置";
@@ -572,6 +678,7 @@ async function loadFile() {
       $("key-search").value = ""; renderRows();
       if (!state.catalog.secrets_ready) toast("查看与保存密钥需要 age 私钥 —— 点左下角状态条或右侧「设置」", "info");
     } else $("config-content").value = state.file.content;
+    state.baseline = contentSnapshot();
   } catch (error) {
     state.file = null;
     $("empty").querySelector("h3").textContent = "暂时无法读取配置";
@@ -586,6 +693,7 @@ async function save() {
   if (state.file.kind === "secrets") {
     payload.values = Object.create(null);
     for (const row of state.rows) {
+      if (!row.key.trim() && !row.value.trim()) continue; // 空行不参与保存，也不该拦住保存
       if (!/^[A-Z_][A-Z0-9_]*$/.test(row.key)) { toast("请检查密钥名称，只能使用大写字母、数字和下划线，不能以数字开头", "error"); return; }
       if (Object.hasOwn(payload.values, row.key)) { toast("存在重复的密钥名称：" + row.key, "error"); return; }
       payload.values[row.key] = row.value;
@@ -594,7 +702,7 @@ async function save() {
   state.busy = true; controls();
   try {
     const result = await api("/api/save", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
-    state.file.revision = result.revision; state.dirty = false;
+    state.file.revision = result.revision; state.dirty = false; state.baseline = contentSnapshot();
     const file = selectedEnvironment().files.find((item) => item.name === state.filename);
     if (file) file.exists = true;
     renderNavigation();

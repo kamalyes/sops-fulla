@@ -148,6 +148,8 @@ func (s *Server) route(w http.ResponseWriter, r *http.Request) error {
 		return s.handleAppearance(w, r)
 	case r.Method == http.MethodPost && r.URL.Path == "/api/workspace":
 		return s.handleWorkspace(w, r)
+	case r.Method == http.MethodPost && r.URL.Path == "/api/browse":
+		return s.handleBrowse(w)
 	case r.Method == http.MethodPost && r.URL.Path == "/api/key":
 		return s.handleKey(w, r)
 	case r.Method == http.MethodPost && r.URL.Path == "/api/keypair":
@@ -179,6 +181,16 @@ func (s *Server) handleWorkspace(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 	return sendJSON(w, http.StatusOK, s.svc.Catalog())
+}
+
+// handleBrowse 弹出系统目录选择窗口，把选好的路径交给页面填入输入框；
+// 用户取消时返回空路径，页面据此提示而不报错
+func (s *Server) handleBrowse(w http.ResponseWriter) error {
+	path, err := service.PickDirectory()
+	if err != nil {
+		return err
+	}
+	return sendJSON(w, http.StatusOK, map[string]string{"path": path})
 }
 
 // handleAppearance 保存页面个性化设置（主题色/字体/字号）到本机配置目录

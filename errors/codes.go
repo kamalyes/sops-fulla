@@ -30,6 +30,8 @@ const (
 	BizErrCodeNoWorkspace         = "error.no_workspace"
 	BizErrCodeWorkspaceInvalid    = "error.workspace_invalid"
 	BizErrCodeRememberFailed      = "error.remember_failed"
+	BizErrCodeBrowseUnsupported   = "error.browse_unsupported"
+	BizErrCodeBrowseFailed        = "error.browse_failed"
 
 	// ============================================
 	// 文档形状
