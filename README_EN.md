@@ -54,7 +54,23 @@ file is not called `secrets.enc.yaml`, override it with
 
 ## 🚀 Getting Started
 
-Download `sops-fulla` for your platform from
+**One-line install** (macOS / Linux — detects the platform, verifies the
+SHA-256 checksum, and installs into `~/.local/bin`):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/kamalyes/sops-fulla/master/install.sh | sh
+```
+
+You can also pin a version or choose the install directory:
+
+```bash
+curl -fsSL -o /tmp/install.sh \
+  https://raw.githubusercontent.com/kamalyes/sops-fulla/master/install.sh
+sh /tmp/install.sh sops-fulla-ab12cd3        # install a specific release tag
+INSTALL_DIR=/usr/local/bin sh /tmp/install.sh  # custom install directory
+```
+
+Or download `sops-fulla` for your platform manually from
 [Releases](https://github.com/kamalyes/sops-fulla/releases)
 (darwin / linux amd64 & arm64, windows amd64, with SHA-256 checksums), or
 `go run` it directly with Go 1.25+:

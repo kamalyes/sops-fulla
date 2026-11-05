@@ -46,7 +46,23 @@ YAML / JSON 配置与 SOPS 密文，保存时自动加解密、未变化的值�
 
 ## 🚀 获取与启动
 
-从 [Releases](https://github.com/kamalyes/sops-fulla/releases) 下载对应平台的
+**一键安装**（macOS / Linux，自动识别平台、校验 SHA-256，
+装进 `~/.local/bin`）：
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/kamalyes/sops-fulla/master/install.sh | sh
+```
+
+也可以指定版本或安装目录：
+
+```bash
+curl -fsSL -o /tmp/install.sh \
+  https://raw.githubusercontent.com/kamalyes/sops-fulla/master/install.sh
+sh /tmp/install.sh sops-fulla-ab12cd3        # 安装指定 Release 的 tag
+INSTALL_DIR=/usr/local/bin sh /tmp/install.sh  # 换安装目录
+```
+
+或从 [Releases](https://github.com/kamalyes/sops-fulla/releases) 手动下载对应平台的
 `sops-fulla`（darwin / linux 的 amd64、arm64，windows 的 amd64，
 附 SHA-256 校验和），或本机有 Go 1.25+ 时直接 `go run`：
 
