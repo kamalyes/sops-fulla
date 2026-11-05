@@ -86,7 +86,12 @@ func (s *Service) rootLocked() string {
 // SetSecretsName 换掉密钥文件名的约定（例如仓库结构改用
 // credentials.enc.yaml）默认约定名之外的名字同样会被当作密钥文件
 // 对待；只应在服务启动前或切换工作区后调用
+// 空串表示未指定：保留默认约定名，不把仓库里的占位条目变成空名字
 func (s *Service) SetSecretsName(name string) {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return
+	}
 	s.lock.Lock()
 	defer s.lock.Unlock()
 	s.secretsName = name
@@ -109,7 +114,10 @@ func (s *Service) SwitchRoot(root string) error {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 	s.repo = repository.New(absolute)
-	s.repo.SetSecretsName(s.secretsName)
+	// 只有显式配置过约定名才重放；零值空串会让新仓库的占位条目变成空名字
+	if s.secretsName != "" {
+		s.repo.SetSecretsName(s.secretsName)
+	}
 	TouchWorkspace(absolute)
 	return nil
 }

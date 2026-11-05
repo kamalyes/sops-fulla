@@ -125,6 +125,21 @@ sops CLI 同样无感
 
 加密只需要 `.sops.yaml` 里的公钥，所以没配私钥的人也能编辑明文配置
 
+### 私钥来源（流程图）
+
+```mermaid
+flowchart TD
+    A["需要解密 / 保存密钥文件"] --> B{"页面设置抽屉里<br/>粘贴过私钥？"}
+    B -->|"是"| P["✅ 页面私钥<br/>仅进程内存，不落盘不进日志"]
+    B -->|"否"| E{"环境变量<br/>SOPS_AGE_KEY / SOPS_AGE_KEY_FILE？"}
+    E -->|"有"| ENV["✅ 环境变量私钥"]
+    E -->|"无"| R{"本机记住的<br/>~/.config/sops-fulla/age.key？"}
+    R -->|"有"| REM["✅ 记住的私钥（可在抽屉里清除）"]
+    R -->|"无"| F{"标准位置<br/>~/.config/sops/age/keys.txt？"}
+    F -->|"有"| FILE["✅ 本机密钥文件（与 sops CLI 互通）"]
+    F -->|"无"| N["⚠️ 私钥未就绪：密文值显示占位<br/>明文配置仍可正常编辑"]
+```
+
 ## 🔄 密钥轮换（页面支持）
 
 怀疑私钥泄露、或定期换钥匙时，打开设置抽屉（左下角状态条或右侧悬浮栏
@@ -161,6 +176,38 @@ sops CLI 同样无感
 不把密钥存进浏览器持久化缓存
 
 ## 🧭 核心流程
+
+### 启动与查看（时序图）
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor U as 👤 运维
+    participant B as 🖥️ 浏览器页面
+    participant S as 🛡️ server
+    participant V as ⚙️ service
+    participant D as 💾 磁盘仓库
+
+    U->>B: 打开 http://127.0.0.1:8765
+    B->>S: GET /（首页）
+    S-->>B: 页面 HTML（注入一次性会话令牌）
+    B->>S: GET /api/catalog（X-Config-Token）
+    S->>V: Catalog()
+    V->>D: 递归扫描 *.yaml / *.yml / *.json
+    V-->>S: 服务 / 环境 / 文件目录 + 私钥就绪状态
+    S-->>B: 目录数据
+    U->>B: 点开某个密文文件
+    B->>S: GET /api/file?service=…&environment=…&filename=…
+    S->>V: Read()
+    V->>D: 读入密文
+    V->>V: age 私钥解出数据密钥 → 逐值解密
+    alt 私钥未配置
+        V-->>S: 密文值显示占位（明文配置不受影响）
+    else 解密成功
+        V-->>S: values / content + revision（内容 SHA-256）
+    end
+    S-->>B: 文档数据（后续保存凭 revision 做冲突检测）
+```
 
 ### 保存一份密钥文件（流程图）
 

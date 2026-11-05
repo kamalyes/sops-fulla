@@ -145,6 +145,21 @@ highest priority first:
 Encryption only needs the recipient in `.sops.yaml`, so people without
 the identity can still edit plain configs.
 
+### Identity Sources (Flowchart)
+
+```mermaid
+flowchart TD
+    A["Need to decrypt / save a secrets file"] --> B{"Pasted an identity<br/>in the settings drawer?"}
+    B -->|"yes"| P["✅ Page identity<br/>process memory only, never on disk or in logs"]
+    B -->|"no"| E{"Environment variable<br/>SOPS_AGE_KEY / SOPS_AGE_KEY_FILE?"}
+    E -->|"set"| ENV["✅ Environment identity"]
+    E -->|"unset"| R{"Remembered on this machine<br/>~/.config/sops-fulla/age.key?"}
+    R -->|"yes"| REM["✅ Remembered identity (clearable in the drawer)"]
+    R -->|"no"| F{"Standard location<br/>~/.config/sops/age/keys.txt?"}
+    F -->|"yes"| FILE["✅ Local key file (interoperable with the sops CLI)"]
+    F -->|"no"| N["⚠️ Identity not ready: secret values show as placeholders<br/>plain configs remain fully editable"]
+```
+
 ## 🔄 Key Rotation (Dashboard)
 
 When you suspect the identity has leaked, or as periodic hygiene, open the
@@ -195,6 +210,38 @@ listens on `127.0.0.1` only, loads no external resources, and keeps no
 secrets in browser persistent storage.
 
 ## 🧭 Core Flows
+
+### Startup & Viewing (Sequence Diagram)
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor U as 👤 Operator
+    participant B as 🖥️ Browser page
+    participant S as 🛡️ server
+    participant V as ⚙️ service
+    participant D as 💾 Repo on disk
+
+    U->>B: Open http://127.0.0.1:8765
+    B->>S: GET / (landing page)
+    S-->>B: Page HTML (one-shot session token injected)
+    B->>S: GET /api/catalog (X-Config-Token)
+    S->>V: Catalog()
+    V->>D: Recursively scan *.yaml / *.yml / *.json
+    V-->>S: Service / environment / file tree + identity readiness
+    S-->>B: Catalog data
+    U->>B: Open an encrypted file
+    B->>S: GET /api/file?service=…&environment=…&filename=…
+    S->>V: Read()
+    V->>D: Load the ciphertext
+    V->>V: Unwrap the data key with the age identity → decrypt each value
+    alt identity not configured
+        V-->>S: Secret values shown as placeholders (plain configs unaffected)
+    else decryption succeeds
+        V-->>S: values / content + revision (content SHA-256)
+    end
+    S-->>B: Document data (later saves use the revision for conflict detection)
+```
 
 ### Saving a Secrets File (Flowchart)
 

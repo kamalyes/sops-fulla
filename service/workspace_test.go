@@ -113,6 +113,47 @@ func TestEmptyWorkspaceStartsAndSwitches(t *testing.T) {
 	}
 }
 
+// TestEmptySecretsNameKeepsDefault 验证未指定约定名时（启动 flags 默认空串）
+// 不会把仓库里的密钥占位条目变成空名字，切换工作区后同样保持默认
+func TestEmptySecretsNameKeepsDefault(t *testing.T) {
+	isolateConfig(t)
+	root := newRepo(t, "alpha")
+	svc := service.NewIsolated(root)
+
+	// 模拟启动链路：--secrets-name 未指定时以空串调用
+	svc.SetSecretsName("")
+	catalog := svc.Catalog()
+	if len(catalog.Services) != 1 || len(catalog.Services[0].Environments) != 1 {
+		t.Fatalf("目录结构不符合预期：%+v", catalog.Services)
+	}
+	files := catalog.Services[0].Environments[0].Files
+	found := false
+	for _, file := range files {
+		if file.Kind == "secrets" {
+			found = true
+			if file.Name != "secrets.enc.yaml" || file.Exists {
+				t.Fatalf("占位密钥条目应保持默认约定名且不存在，实际 %+v", file)
+			}
+		}
+	}
+	if !found {
+		t.Fatal("没有密钥文件的环境应有约定名占位条目")
+	}
+
+	// 显式指定约定名后仍正常生效，且切回空串不回退已设置的值
+	svc.SetSecretsName("credentials.enc.yaml")
+	if err := svc.SwitchRoot(newRepo(t, "beta")); err != nil {
+		t.Fatal(err)
+	}
+	svc.SetSecretsName("")
+	catalog = svc.Catalog()
+	for _, file := range catalog.Services[0].Environments[0].Files {
+		if file.Kind == "secrets" && file.Name != "credentials.enc.yaml" {
+			t.Fatalf("显式约定名不应被空串覆盖，实际 %+v", file)
+		}
+	}
+}
+
 // TestRememberKeyRoundTrip 验证记住的私钥：写入、下次启动自动加载、清除
 func TestRememberKeyRoundTrip(t *testing.T) {
 	isolateConfig(t)
